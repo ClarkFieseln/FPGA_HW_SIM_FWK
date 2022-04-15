@@ -4,15 +4,15 @@ Simulate hardware containing an FPGA programmed in VHDL interactively.
 
 [Article in Code Project](https://www.codeproject.com/Articles/XXX "FPGA_HW_SIM_FWK Article in Code Project")
 
-## FPGA_HW_SIM_FWK - Simulate hardware containing an FPGA programmed in VHDL interactively!
+## Simulate hardware containing an FPGA programmed in VHDL interactively!
 
 ![plot](./img/simulation.png)
 
-## FPGA_HW_SIM_FWK - Architecture overview
+## Architecture overview
 
 ![plot](./img/architecture_overview.png)
 
-## FPGA_HW_SIM_FWK - FPGA GUI
+## FPGA GUI
 
 ![plot](./img/fpga_gui.jpg)
 
