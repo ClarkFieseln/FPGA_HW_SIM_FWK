@@ -13,7 +13,7 @@ FPGA Hardware Simulation Framework
 
 ## FPGA GUI
 
-![plot](./img/fpga_gui.jpg)
+![plot](./img/fpga_gui.png)
 
 ## FPGA_HW_SIM_FWK (demo video)
 
