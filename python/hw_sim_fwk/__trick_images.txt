@@ -1,0 +1,11 @@
+
+# in order to create images when working with PyCharm i.o. eric6:
+# ---------------------------------------------------------------
+# go to folder with fpga.qrc, then:
+# sudo pyrcc5 fpga.qrc -o fpga_rc.py
+# or:
+# pyrcc5 fpga.qrc -o fpga_rc.py
+# then copy .py to project path
+# TODO: try to avoid copy by indicating path instead
+
+

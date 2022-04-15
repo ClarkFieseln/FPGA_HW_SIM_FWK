@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="jmp_off">
+    <file>jmp_off.png</file>
+  </qresource>
+</RCC>

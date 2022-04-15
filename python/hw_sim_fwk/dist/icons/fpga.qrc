@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="fpga">
+    <file>board.png</file>
+  </qresource>
+</RCC>

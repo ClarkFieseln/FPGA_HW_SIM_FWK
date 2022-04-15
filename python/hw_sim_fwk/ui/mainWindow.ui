@@ -1,0 +1,1257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1194</width>
+    <height>706</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <widget class="QTabWidget" name="tabWidget">
+    <property name="geometry">
+     <rect>
+      <x>0</x>
+      <y>0</y>
+      <width>1191</width>
+      <height>701</height>
+     </rect>
+    </property>
+    <property name="currentIndex">
+     <number>0</number>
+    </property>
+    <widget class="QWidget" name="tab_fpga">
+     <attribute name="title">
+      <string>FPGA board</string>
+     </attribute>
+     <widget class="QGroupBox" name="groupBox_2">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>0</y>
+        <width>1171</width>
+        <height>61</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string/>
+      </property>
+      <widget class="QPushButton" name="pbOnOff">
+       <property name="geometry">
+        <rect>
+         <x>349</x>
+         <y>10</y>
+         <width>43</width>
+         <height>43</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset>
+         <normaloff>../dist/icons/on.png</normaloff>
+         <selectedoff>:/off/off.png</selectedoff>
+         <selectedon>:/on/on.png</selectedon>../dist/icons/on.png</iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>41</width>
+         <height>41</height>
+        </size>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QGroupBox" name="groupBox_3">
+       <property name="geometry">
+        <rect>
+         <x>9</x>
+         <y>10</y>
+         <width>51</width>
+         <height>41</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <widget class="QLabel" name="lblStatus">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>10</y>
+          <width>41</width>
+          <height>20</height>
+         </rect>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>28</pointsize>
+         </font>
+        </property>
+        <property name="text">
+         <string> /</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QPushButton" name="pbRunPause">
+       <property name="geometry">
+        <rect>
+         <x>540</x>
+         <y>10</y>
+         <width>121</width>
+         <height>41</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string notr="true"/>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset>
+         <activeoff>:/pause/pause.png</activeoff>
+         <selectedoff>:/pause/pause.png</selectedoff>
+         <selectedon>:/run/run.png</selectedon>
+        </iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>120</width>
+         <height>39</height>
+        </size>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+       <property name="flat">
+        <bool>false</bool>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="pbStep">
+       <property name="geometry">
+        <rect>
+         <x>680</x>
+         <y>9</y>
+         <width>121</width>
+         <height>41</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string notr="true"/>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset resource="../dist/icons/step.qrc">
+         <normaloff>:/step/step.png</normaloff>:/step/step.png</iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>120</width>
+         <height>39</height>
+        </size>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+       <property name="flat">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="pbReset">
+       <property name="geometry">
+        <rect>
+         <x>74</x>
+         <y>10</y>
+         <width>43</width>
+         <height>43</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string notr="true"/>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset>
+         <selectedoff>:/reset/reset.png</selectedoff>
+        </iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>41</width>
+         <height>41</height>
+        </size>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+       <property name="flat">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblReset">
+       <property name="geometry">
+        <rect>
+         <x>123</x>
+         <y>16</y>
+         <width>121</width>
+         <height>31</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font: 14pt &quot;Ubuntu Mono&quot;;</string>
+       </property>
+       <property name="text">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;RESET: low&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="pbRunForTime">
+       <property name="geometry">
+        <rect>
+         <x>819</x>
+         <y>9</y>
+         <width>121</width>
+         <height>41</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">background-image: url(:/run_for_time/run_for_time.png);</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+       <property name="icon">
+        <iconset resource="../dist/icons/run_for_time.qrc">
+         <normaloff>:/run_for_time/run_for_time.png</normaloff>:/run_for_time/run_for_time.png</iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>120</width>
+         <height>39</height>
+        </size>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+       <property name="flat">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblClkPeriods">
+       <property name="geometry">
+        <rect>
+         <x>960</x>
+         <y>34</y>
+         <width>101</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Ubuntu Mono</family>
+         <pointsize>14</pointsize>
+         <weight>50</weight>
+         <italic>false</italic>
+         <bold>false</bold>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font: 14pt &quot;Ubuntu Mono&quot;;</string>
+       </property>
+       <property name="text">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;clk periods&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblRemainingLbl">
+       <property name="geometry">
+        <rect>
+         <x>1069</x>
+         <y>34</y>
+         <width>101</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Ubuntu Mono</family>
+         <pointsize>14</pointsize>
+         <weight>50</weight>
+         <italic>false</italic>
+         <bold>false</bold>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font: 14pt &quot;Ubuntu Mono&quot;;</string>
+       </property>
+       <property name="text">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;remaining&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblRemaining">
+       <property name="geometry">
+        <rect>
+         <x>1071</x>
+         <y>14</y>
+         <width>101</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Ubuntu Mono</family>
+         <pointsize>14</pointsize>
+         <weight>50</weight>
+         <italic>false</italic>
+         <bold>false</bold>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font: 14pt &quot;Ubuntu Mono&quot;;</string>
+       </property>
+       <property name="text">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;0&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="leClkPeriods">
+       <property name="geometry">
+        <rect>
+         <x>960</x>
+         <y>10</y>
+         <width>91</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>50</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="leClkPeriodMs">
+       <property name="geometry">
+        <rect>
+         <x>410</x>
+         <y>10</y>
+         <width>61</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>1000</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblRemainingLbl_2">
+       <property name="geometry">
+        <rect>
+         <x>475</x>
+         <y>10</y>
+         <width>21</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Ubuntu Mono</family>
+         <pointsize>14</pointsize>
+         <weight>50</weight>
+         <italic>false</italic>
+         <bold>false</bold>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font: 14pt &quot;Ubuntu Mono&quot;;</string>
+       </property>
+       <property name="text">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;ms&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
+      <widget class="QGroupBox" name="groupBox">
+       <property name="geometry">
+        <rect>
+         <x>814</x>
+         <y>3</y>
+         <width>353</width>
+         <height>55</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblClkPeriods_2">
+       <property name="geometry">
+        <rect>
+         <x>410</x>
+         <y>33</y>
+         <width>101</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Ubuntu Mono</family>
+         <pointsize>14</pointsize>
+         <weight>50</weight>
+         <italic>false</italic>
+         <bold>false</bold>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font: 14pt &quot;Ubuntu Mono&quot;;</string>
+       </property>
+       <property name="text">
+        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;clk period&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       </property>
+      </widget>
+      <zorder>groupBox</zorder>
+      <zorder>pbOnOff</zorder>
+      <zorder>groupBox_3</zorder>
+      <zorder>pbRunPause</zorder>
+      <zorder>pbStep</zorder>
+      <zorder>pbReset</zorder>
+      <zorder>lblReset</zorder>
+      <zorder>pbRunForTime</zorder>
+      <zorder>lblClkPeriods</zorder>
+      <zorder>lblRemainingLbl</zorder>
+      <zorder>lblRemaining</zorder>
+      <zorder>leClkPeriods</zorder>
+      <zorder>leClkPeriodMs</zorder>
+      <zorder>lblRemainingLbl_2</zorder>
+      <zorder>lblClkPeriods_2</zorder>
+     </widget>
+     <widget class="QLabel" name="label">
+      <property name="geometry">
+       <rect>
+        <x>170</x>
+        <y>170</y>
+        <width>851</width>
+        <height>371</height>
+       </rect>
+      </property>
+      <property name="palette">
+       <palette>
+        <active/>
+        <inactive/>
+        <disabled/>
+       </palette>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">background-image: url(:/fpga/board.png);</string>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+      <property name="pixmap">
+       <pixmap resource="../dist/icons/fpga.qrc">:/fpga/board.png</pixmap>
+      </property>
+      <property name="scaledContents">
+       <bool>true</bool>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pbActive">
+      <property name="geometry">
+       <rect>
+        <x>989</x>
+        <y>490</y>
+        <width>25</width>
+        <height>11</height>
+       </rect>
+      </property>
+      <property name="autoFillBackground">
+       <bool>true</bool>
+      </property>
+      <property name="styleSheet">
+       <string notr="true"/>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+      <property name="icon">
+       <iconset>
+        <selectedoff>:/led_green_off/led_green_off.png</selectedoff>
+        <selectedon>:/led_green_on/led_green_on.png</selectedon>
+       </iconset>
+      </property>
+      <property name="iconSize">
+       <size>
+        <width>25</width>
+        <height>11</height>
+       </size>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+      <property name="flat">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QWidget" name="tab_settings">
+     <attribute name="title">
+      <string>Settings</string>
+     </attribute>
+     <widget class="QGroupBox" name="gbStoreSettings">
+      <property name="geometry">
+       <rect>
+        <x>5</x>
+        <y>4</y>
+        <width>181</width>
+        <height>329</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Store / restore configuration</string>
+      </property>
+      <widget class="QPushButton" name="pbSettingsLoad">
+       <property name="geometry">
+        <rect>
+         <x>96</x>
+         <y>81</y>
+         <width>75</width>
+         <height>23</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>Load</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="pbSettingsSave">
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>81</y>
+         <width>75</width>
+         <height>23</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>Save</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="pbSettingsSaveAs">
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>114</y>
+         <width>75</width>
+         <height>23</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>Save as</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblConfigFileName">
+       <property name="geometry">
+        <rect>
+         <x>14</x>
+         <y>53</y>
+         <width>151</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::NoFrame</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Plain</enum>
+       </property>
+       <property name="midLineWidth">
+        <number>0</number>
+       </property>
+       <property name="text">
+        <string>config.ini</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblConfigFileName_2">
+       <property name="geometry">
+        <rect>
+         <x>14</x>
+         <y>32</y>
+         <width>151</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::NoFrame</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Plain</enum>
+       </property>
+       <property name="midLineWidth">
+        <number>0</number>
+       </property>
+       <property name="text">
+        <string>Configuration file:</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="gbPlot">
+      <property name="geometry">
+       <rect>
+        <x>193</x>
+        <y>87</y>
+        <width>251</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Plot</string>
+      </property>
+      <widget class="QCheckBox" name="cbPlotShow">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>24</y>
+         <width>61</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>show</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="gbAdvancedGeneral">
+      <property name="geometry">
+       <rect>
+        <x>192</x>
+        <y>4</y>
+        <width>251</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>General</string>
+      </property>
+      <widget class="QLabel" name="lblVersion">
+       <property name="geometry">
+        <rect>
+         <x>68</x>
+         <y>26</y>
+         <width>181</width>
+         <height>41</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>...</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_5">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>28</y>
+         <width>50</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>Version:</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="gbLogging">
+      <property name="geometry">
+       <rect>
+        <x>454</x>
+        <y>170</y>
+        <width>281</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Logging</string>
+      </property>
+      <widget class="QComboBox" name="cbLoggingLevel">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>21</x>
+         <y>23</y>
+         <width>241</width>
+         <height>22</height>
+        </rect>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="cbLoggingOn">
+       <property name="geometry">
+        <rect>
+         <x>21</x>
+         <y>50</y>
+         <width>51</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>on</string>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="cbLogOnPowerOnOff">
+       <property name="geometry">
+        <rect>
+         <x>118</x>
+         <y>50</y>
+         <width>151</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>log over powr on-off</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_4">
+      <property name="geometry">
+       <rect>
+        <x>454</x>
+        <y>4</y>
+        <width>281</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>GUI</string>
+      </property>
+      <widget class="QLineEdit" name="leGuiRefreshHz">
+       <property name="geometry">
+        <rect>
+         <x>23</x>
+         <y>26</y>
+         <width>61</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>250</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_3">
+       <property name="geometry">
+        <rect>
+         <x>24</x>
+         <y>52</y>
+         <width>101</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>GUI refresh rate</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_4">
+       <property name="geometry">
+        <rect>
+         <x>91</x>
+         <y>30</y>
+         <width>21</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>Hz</string>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="cbShowLiveStatus">
+       <property name="geometry">
+        <rect>
+         <x>140</x>
+         <y>30</y>
+         <width>121</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>show live status</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="gbPlot_2">
+      <property name="geometry">
+       <rect>
+        <x>192</x>
+        <y>170</y>
+        <width>251</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Sound</string>
+      </property>
+      <widget class="QCheckBox" name="cbSoundOn">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>24</y>
+         <width>61</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>on</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_5">
+      <property name="geometry">
+       <rect>
+        <x>455</x>
+        <y>87</y>
+        <width>281</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Clock</string>
+      </property>
+      <widget class="QLineEdit" name="leMinClockPeriodMs">
+       <property name="geometry">
+        <rect>
+         <x>23</x>
+         <y>26</y>
+         <width>111</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>50</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_8">
+       <property name="geometry">
+        <rect>
+         <x>24</x>
+         <y>52</y>
+         <width>121</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>min. clock period</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_9">
+       <property name="geometry">
+        <rect>
+         <x>141</x>
+         <y>30</y>
+         <width>21</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>ms</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="gbPlot_3">
+      <property name="geometry">
+       <rect>
+        <x>192</x>
+        <y>253</y>
+        <width>543</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Path (save and restart to use new path)</string>
+      </property>
+      <widget class="QLineEdit" name="leFilePath">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>30</y>
+         <width>431</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="pbFilePath">
+       <property name="geometry">
+        <rect>
+         <x>450</x>
+         <y>30</y>
+         <width>75</width>
+         <height>23</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>...</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_10">
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>57</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>path to share files with FPGA Simulator</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_6">
+      <property name="geometry">
+       <rect>
+        <x>746</x>
+        <y>4</y>
+        <width>434</width>
+        <height>329</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Number of FPGA items (save and restart to use new values)</string>
+      </property>
+      <widget class="QComboBox" name="cbNrDis">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>30</y>
+         <width>81</width>
+         <height>22</height>
+        </rect>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblNrDis">
+       <property name="geometry">
+        <rect>
+         <x>101</x>
+         <y>33</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>digital inputs (total)</string>
+       </property>
+      </widget>
+      <widget class="QComboBox" name="cbNrDos">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>94</y>
+         <width>81</width>
+         <height>22</height>
+        </rect>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblNrDos">
+       <property name="geometry">
+        <rect>
+         <x>101</x>
+         <y>97</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>digital outputs</string>
+       </property>
+      </widget>
+      <widget class="QComboBox" name="cbNrAsyncDis">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>62</y>
+         <width>81</width>
+         <height>22</height>
+        </rect>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblNrAsyncDis">
+       <property name="geometry">
+        <rect>
+         <x>101</x>
+         <y>65</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>digital inputs (asynchronous)</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblNrBtns">
+       <property name="geometry">
+        <rect>
+         <x>101</x>
+         <y>130</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>buttons</string>
+       </property>
+      </widget>
+      <widget class="QComboBox" name="cbNrBtns">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>127</y>
+         <width>81</width>
+         <height>22</height>
+        </rect>
+       </property>
+      </widget>
+      <widget class="QComboBox" name="cbNrSwitches">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>159</y>
+         <width>81</width>
+         <height>22</height>
+        </rect>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblNrSwitches">
+       <property name="geometry">
+        <rect>
+         <x>101</x>
+         <y>162</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>switches</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblNrLeds">
+       <property name="geometry">
+        <rect>
+         <x>101</x>
+         <y>195</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>LEDs</string>
+       </property>
+      </widget>
+      <widget class="QComboBox" name="cbNrLeds">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>192</y>
+         <width>81</width>
+         <height>22</height>
+        </rect>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_7">
+      <property name="geometry">
+       <rect>
+        <x>746</x>
+        <y>340</y>
+        <width>434</width>
+        <height>329</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Simulation settings (save and restart to use new values)</string>
+      </property>
+      <widget class="QLabel" name="lblMaxDiCount">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>33</y>
+         <width>291</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>max. count of digital input</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblBtnPerClkPer">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>128</y>
+         <width>241</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>buttons - clock periods for one period</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblDiPerInClkPer">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>64</y>
+         <width>261</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>digital inputs - clock periods for one period</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblSwPerInClkPer">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>96</y>
+         <width>241</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>switches - clock periods for one period</string>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="cbBtnToggleAuto">
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>160</y>
+         <width>391</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>buttons - toggle automatically</string>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="cbSwToggleAuto">
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>190</y>
+         <width>391</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>switches - toggle automatically</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="leMaxDiCount">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>30</y>
+         <width>111</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>32</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="leDiPerInClkPer">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>60</y>
+         <width>111</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>32</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="leSwPerInClkPer">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>90</y>
+         <width>111</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>32</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="leBtnPerClkPer">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>120</y>
+         <width>111</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>32</string>
+       </property>
+      </widget>
+     </widget>
+    </widget>
+   </widget>
+  </widget>
+ </widget>
+ <resources>
+  <include location="../dist/icons/fpga.qrc"/>
+  <include location="../dist/icons/on.qrc"/>
+  <include location="../dist/icons/off.qrc"/>
+  <include location="../dist/icons/jmp_off.qrc"/>
+  <include location="../dist/icons/jmp_on.qrc"/>
+  <include location="../dist/icons/run_for_time.qrc"/>
+  <include location="../dist/icons/reset.qrc"/>
+  <include location="../dist/icons/step.qrc"/>
+  <include location="../dist/icons/pause.qrc"/>
+  <include location="../dist/icons/run.qrc"/>
+  <include location="../dist/icons/led_green_off.qrc"/>
+  <include location="../dist/icons/led_green_on.qrc"/>
+  <include location="../dist/icons/led_on.qrc"/>
+  <include location="../dist/icons/led_off.qrc"/>
+  <include location="../dist/icons/btn_down.qrc"/>
+  <include location="../dist/icons/btn_up.qrc"/>
+  <include location="../dist/icons/switch_right.qrc"/>
+  <include location="../dist/icons/switch_left.qrc"/>
+ </resources>
+ <connections/>
+</ui>

@@ -1,0 +1,4 @@
+remove switch.qrc
+and switch.py
+
+

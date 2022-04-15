@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="switch_right">
+    <file>sw_right.png</file>
+  </qresource>
+</RCC>

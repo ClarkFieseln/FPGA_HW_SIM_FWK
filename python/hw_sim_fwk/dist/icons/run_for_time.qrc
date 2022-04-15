@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="run_for_time">
+    <file>run_for_time.png</file>
+  </qresource>
+</RCC>
