@@ -17,4 +17,4 @@ FPGA Hardware Simulation Framework
 
 ## FPGA_HW_SIM_FWK (demo video)
 
-[Video Playlist](https://www.youtube.com/watch?v=Yqu1DDGK04c "FPGA_HW_SIM_FWK Demo Video")
+[Demo Video](https://www.youtube.com/watch?v=Yqu1DDGK04c "FPGA_HW_SIM_FWK Demo Video")
