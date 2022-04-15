@@ -1,6 +1,5 @@
 # FPGA_HW_SIM_FWK
 FPGA Hardware Simulation Framework
-Simulate hardware containing an FPGA programmed in VHDL interactively.
 
 [Article in Code Project](https://www.codeproject.com/Articles/XXX "FPGA_HW_SIM_FWK Article in Code Project")
 
