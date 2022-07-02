@@ -117,7 +117,6 @@ begin
             FILE_PATH                 => FILE_PATH,
             CLOCK_FILE_NAME           => CLOCK_FILE_NAME,
             CLOCK_PERIOD              => CLOCK_PERIOD,
-            MAX_ELAPSED_CLOCK_PERIODS => MAX_ELAPSED_CLOCK_PERIODS,
             PROTOCOL_CLOCK            => PROTOCOL_CLOCK
         )
         port map(
