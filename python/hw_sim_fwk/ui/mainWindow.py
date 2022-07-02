@@ -43,8 +43,7 @@ cf = currentframe()
 # module definitions and variables:
 FILE_NAME_RESET_HIGH = None
 FILE_NAME_RESET_LOW = None
-FILE_NAME_CLOCK_HIGH = None
-FILE_NAME_CLOCK_LOW = None
+FILE_NAME_CLOCK = None
 FILE_NAME_DI_HIGH = []
 FILE_NAME_DI_LOW = []
 SYNC_DI = []
@@ -71,8 +70,7 @@ DO_PERIOD_SEC = None
 def updateGuiDefs():
     global FILE_NAME_RESET_HIGH
     global FILE_NAME_RESET_LOW
-    global FILE_NAME_CLOCK_HIGH
-    global FILE_NAME_CLOCK_LOW
+    global FILE_NAME_CLOCK
     global FILE_NAME_DI_HIGH
     global FILE_NAME_DI_LOW
     global SYNC_DI
@@ -105,8 +103,7 @@ def updateGuiDefs():
     FILE_NAME_RESET_HIGH = configuration.FILE_PATH + "reset_high"
     FILE_NAME_RESET_LOW = configuration.FILE_PATH + "reset_low"
     # clock
-    FILE_NAME_CLOCK_HIGH = configuration.FILE_PATH + "clock_high"
-    FILE_NAME_CLOCK_LOW = configuration.FILE_PATH + "clock_low"
+    FILE_NAME_CLOCK = configuration.FILE_PATH + "clock"
     # check max nr. of DIs and DOs  
     if configuration.NR_DIS > configuration.MAX_NR_DI:
         configuration.NR_DIS = configuration.MAX_NR_DI
@@ -254,8 +251,8 @@ def createTempFiles():
     # remove temporary files with "active" value: in this case HIGH, ON,..
     if os.path.exists(FILE_NAME_RESET_HIGH):
         os.remove(FILE_NAME_RESET_HIGH)
-    if os.path.exists(FILE_NAME_CLOCK_HIGH):
-        os.remove(FILE_NAME_CLOCK_HIGH)
+    if os.path.exists(FILE_NAME_CLOCK):
+        os.remove(FILE_NAME_CLOCK)
     for i in range(configuration.NR_DIS):
         if os.path.exists(FILE_NAME_DI_HIGH[i]):
             os.remove(FILE_NAME_DI_HIGH[i])
@@ -276,8 +273,8 @@ def createTempFiles():
     # create temporary files with "inactive" value: in this case LOW, OFF,..
     f = open(FILE_NAME_RESET_LOW, "w+")
     f.close()
-    f = open(FILE_NAME_CLOCK_LOW, "w+")
-    f.close()
+    if os.path.exists(FILE_NAME_CLOCK) == False:
+        os.mkfifo(FILE_NAME_CLOCK)
     for i in range(configuration.NR_DIS):
         f = open(FILE_NAME_DI_LOW[i], "w+")
         f.close()
@@ -334,6 +331,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     statusCnt = 0
     csv_file = None
     toggle = True
+    clock_high = False
     toggle_switch = True
     toggle_button = True
     toggle_di = True
@@ -362,6 +360,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     evt_set_switch_off = []
     # evt_set_led_on = []
     # evt_set_led_off = []
+
+    # open fifos (named pipes)
+    ##########################
+    # TODO: check if we need to close them and where
+    fifo_w_clock = open(FILE_NAME_CLOCK, 'w')
+    print("done")
 
     ######################################################################################
     # NOTE: we don't modify GUI objects from a QThread
@@ -459,21 +463,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # handle clock - falling edge
                     # NOTE: it is important to schedule all tasks first before emulating a clock change
                     ###################################################################################
-                    if os.path.isfile(FILE_NAME_CLOCK_HIGH):
-                        os.rename(FILE_NAME_CLOCK_HIGH,
-                                  FILE_NAME_CLOCK_LOW)
-                    else:
-                        f = open(FILE_NAME_CLOCK_LOW, "w+")
-                        f.close()
+                    self.clock_high = False
+                    self.fifo_w_clock.write("0\r\n")
+                    self.fifo_w_clock.flush()
                 else:
                     # handle clock - raising edge
                     #############################
-                    if os.path.isfile(FILE_NAME_CLOCK_LOW):
-                        os.rename(FILE_NAME_CLOCK_LOW,
-                                  FILE_NAME_CLOCK_HIGH)
-                    else:
-                        f = open(FILE_NAME_CLOCK_HIGH, "w+")
-                        f.close()
+                    self.clock_high = True
+                    self.fifo_w_clock.write("1\r\n")
+                    self.fifo_w_clock.flush()
                     # handle digital outputs
                     ########################
                     self.do_do()
@@ -496,7 +494,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if (evt_pause.is_set()) == True:
                 evt_resume.wait(999999)
             elif (evt_step_on.is_set() == True):
-                if os.path.isfile(FILE_NAME_CLOCK_LOW):
+                if self.clock_high == False:
                     while evt_step_on.is_set() == True and evt_do_step.is_set() == False:
                         evt_do_step.wait(CLOCK_PERIOD_SEC / 2)
                 else:
@@ -1162,7 +1160,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # set RESET to high for T/2 in order to initialize VHDL signals
             evt_set_reset_low.clear()
             evt_set_reset_high.set()
-            time.sleep(CLOCK_PERIOD_SEC / 2)
+            time.sleep((CLOCK_PERIOD_SEC / 2)*2)
             evt_set_reset_high.clear()
             evt_set_reset_low.set()
             # time.sleep(CLOCK_PERIOD_SEC/2) # need this?            
