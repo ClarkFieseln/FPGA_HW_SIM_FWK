@@ -78,7 +78,7 @@ begin
                 -- evaluate external clock signal
                 if stimulus = '1' then
                 
-                    -- as an error, the external clock signal may repeat the same edge transition
+                    -- as a result of an error, the external clock signal may repeat the same edge transition
                     -- therefore we always check current state of pos_edge
                     -- rising edge?
                     if pos_edge = false then
