@@ -6,5 +6,5 @@
 # or:
 # pyrcc5 fpga.qrc -o fpga_rc.py
 # then, when calling pyuic, indicate with the option --import-from the path where these files are found, e.g.:
-# sudo python3 -m PyQt5.uic.pyuic -x mainWindow.ui -o Ui_mainWindow.py --import-from=dist/icons
+# sudo python3 -m PyQt5.uic.pyuic -x mainWindow.ui -o Ui_mainWindow.py --import-from=dist.icons
 
