@@ -26,8 +26,8 @@ end hw_sim_fwk_clock;
 
 architecture arch of hw_sim_fwk_clock is
 begin
-    -- polling process
-    -- ###############
+    -- process to read FIFO
+    -- ####################
     proc_update_clock : process
         file     i_file      : text;
         variable open_status : file_open_status;
