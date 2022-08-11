@@ -17,23 +17,23 @@ Note 1: using only shared files is possible but one CPU will be always at 100% p
 
 Note 2: in the case "App to VHDL" we don't use named pipes (FIFOs) for:
         - DIs
-	  - switches
-	  - buttons
-	  - reset
-	  - etc.
+	- switches
+	- buttons
+	- reset
+	- etc.
         because the "blocking" call on readline() will block the complete VHDL simulation, 
-	  even when the calls are done in different processes or modules!
+	even when the calls are done in different processes or modules!
 
 Assumption: concurrency of processes in the VHDL simulator VIVADO 2022.1 does not have the same characteristics
             as concurrency of threads at the level of the operating system, at least for handling files/pipes.
 
 TODO:
-- investigate if this is a bug in VIVADO 2022.1 or a "whole" in the VHDL specification.
+- investigate if this is a bug in VIVADO 2022.1 or a "hole" in the VHDL specification.
 - test if the violation of "concurrency" when using two "normal" stimulus files in different
   processes simultaneously also occurs.
   This would mean e.g. that it is not possible to input several stimulus files simultaneously
-  to different processes in a concurrent way, what is a "big constraint"!
-  For sure the same limitation will then occur with stdin, stdout and stderr.
+  to different processes in a concurrent way, what is a "big constraint" but shows how powerful FPGA_HW_SIM_FWK is!
+  Probably the same limitation will then occur with stdin, stdout and stderr.
 - investigate how to read FIFO in VHDL without blocking. But this overrides the whole purpose of 
   using named pipes in the first place, which is to NOT poll anything but just wait blocking
   only the current process.
