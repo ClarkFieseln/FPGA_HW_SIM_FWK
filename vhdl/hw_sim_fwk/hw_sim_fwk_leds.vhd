@@ -15,9 +15,9 @@ entity hw_sim_fwk_leds is
     generic(
         NR_LEDS            : integer := 2;
         FILE_PATH          : string  := "/tmp/";
-        LEDS_ON_FILE_NAME  : string  := "/tmp/led_on"; -- FILE_PATH & "led_on" -- cannot use concatenation here!
-        LEDS_OFF_FILE_NAME : string  := "/tmp/led_off";
-        PROTOCOL_LEDS      : boolean := false -- to report details
+        LEDS_ON_FILE_NAME  : string  := FILE_PATH & "led_on";
+        LEDS_OFF_FILE_NAME : string  := FILE_PATH & "led_off";
+        PROTOCOL_LEDS      : boolean := false
     );
     -- NOTE: we want to take clock as input and change LED ONLY with clock
     port(
