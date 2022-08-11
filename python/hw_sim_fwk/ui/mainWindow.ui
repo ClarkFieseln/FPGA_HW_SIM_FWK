@@ -24,7 +24,7 @@
      </rect>
     </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>1</number>
     </property>
     <widget class="QWidget" name="tab_fpga">
      <attribute name="title">
@@ -262,7 +262,6 @@
         <font>
          <family>Ubuntu Mono</family>
          <pointsize>14</pointsize>
-         <weight>50</weight>
          <italic>false</italic>
          <bold>false</bold>
         </font>
@@ -287,7 +286,6 @@
         <font>
          <family>Ubuntu Mono</family>
          <pointsize>14</pointsize>
-         <weight>50</weight>
          <italic>false</italic>
          <bold>false</bold>
         </font>
@@ -312,7 +310,6 @@
         <font>
          <family>Ubuntu Mono</family>
          <pointsize>14</pointsize>
-         <weight>50</weight>
          <italic>false</italic>
          <bold>false</bold>
         </font>
@@ -363,7 +360,6 @@
         <font>
          <family>Ubuntu Mono</family>
          <pointsize>14</pointsize>
-         <weight>50</weight>
          <italic>false</italic>
          <bold>false</bold>
         </font>
@@ -401,7 +397,6 @@
         <font>
          <family>Ubuntu Mono</family>
          <pointsize>14</pointsize>
-         <weight>50</weight>
          <italic>false</italic>
          <bold>false</bold>
         </font>
@@ -506,7 +501,7 @@
         <x>5</x>
         <y>4</y>
         <width>181</width>
-        <height>329</height>
+        <height>484</height>
        </rect>
       </property>
       <property name="title">
@@ -562,7 +557,6 @@
        </property>
        <property name="font">
         <font>
-         <weight>75</weight>
          <bold>true</bold>
         </font>
        </property>
@@ -868,7 +862,7 @@
         <x>192</x>
         <y>253</y>
         <width>543</width>
-        <height>80</height>
+        <height>151</height>
        </rect>
       </property>
       <property name="title">
@@ -908,12 +902,41 @@
         <rect>
          <x>11</x>
          <y>57</y>
-         <width>291</width>
-         <height>16</height>
+         <width>321</width>
+         <height>21</height>
         </rect>
        </property>
        <property name="text">
-        <string>path to share files with FPGA Simulator</string>
+        <string>path to shared files with FPGA Simulator</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="leFifoPath">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>93</y>
+         <width>431</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_13">
+       <property name="geometry">
+        <rect>
+         <x>11</x>
+         <y>119</y>
+         <width>491</width>
+         <height>21</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>prefix for named pipes to exchange data with FPGA Simulator</string>
        </property>
       </widget>
      </widget>
@@ -1226,6 +1249,58 @@
        </property>
        <property name="text">
         <string>32</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QGroupBox" name="groupBox_8">
+      <property name="geometry">
+       <rect>
+        <x>192</x>
+        <y>408</y>
+        <width>281</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <property name="title">
+       <string>Reset time</string>
+      </property>
+      <widget class="QLineEdit" name="leResetSecs">
+       <property name="geometry">
+        <rect>
+         <x>23</x>
+         <y>26</y>
+         <width>111</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>0.1</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_11">
+       <property name="geometry">
+        <rect>
+         <x>24</x>
+         <y>52</y>
+         <width>131</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>(used during startup)</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="label_12">
+       <property name="geometry">
+        <rect>
+         <x>141</x>
+         <y>30</y>
+         <width>51</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>seconds</string>
        </property>
       </widget>
      </widget>
