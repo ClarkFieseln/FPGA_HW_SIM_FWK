@@ -103,14 +103,20 @@ class InitApp(object):
                     configuration.CLOCK_PERIOD_EXTERNAL = self.config['commonConfig']['CLOCK_PERIOD_EXTERNAL']
                     logging.info("CLOCK_PERIOD_EXTERNAL = " + str(configuration.CLOCK_PERIOD_EXTERNAL))
                 if "CLOCK_PERIOD_EXTERNAL_MIN_MS" in self.config["commonConfig"]:
-                    configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS = self.config.getint('commonConfig','CLOCK_PERIOD_EXTERNAL_MIN_MS')
-                    logging.info("CLOCK_PERIOD_EXTERNAL_MIN_MS = " + str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS))                    
+                    configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS = self.config.getfloat('commonConfig','CLOCK_PERIOD_EXTERNAL_MIN_MS')
+                    logging.info("CLOCK_PERIOD_EXTERNAL_MIN_MS = " + str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS))
+                if "RESET_FOR_SECONDS" in self.config["commonConfig"]:
+                    configuration.RESET_FOR_SECONDS = self.config.getfloat('commonConfig','RESET_FOR_SECONDS')
+                    logging.info("RESET_FOR_SECONDS = " + str(configuration.RESET_FOR_SECONDS))
                 if "CLOCK_PERIOD_VHDL_NS" in self.config["commonConfig"]:
                     configuration.CLOCK_PERIOD_VHDL_NS = self.config['commonConfig']['CLOCK_PERIOD_VHDL_NS']
                     logging.info("CLOCK_PERIOD_VHDL_NS = " + str(configuration.CLOCK_PERIOD_VHDL_NS))
                 if "FILE_PATH" in self.config["commonConfig"]:
                     configuration.FILE_PATH = self.config['commonConfig']['FILE_PATH']
-                    logging.info("FILE_PATH = " + str(configuration.FILE_PATH))        
+                    logging.info("FILE_PATH = " + str(configuration.FILE_PATH))
+                if "FIFO_PATH" in self.config["commonConfig"]:
+                    configuration.FIFO_PATH = self.config['commonConfig']['FIFO_PATH']
+                    logging.info("FIFO_PATH = " + str(configuration.FIFO_PATH))
                 if "MAX_NR_DI" in self.config["commonConfig"]:
                     configuration.MAX_NR_DI = self.config.getint('commonConfig','MAX_NR_DI')
                     logging.info("MAX_NR_DI = " + str(configuration.MAX_NR_DI))   
@@ -208,9 +214,11 @@ class InitApp(object):
         self.config['myConfig']['RUN_FOR_CLOCK_PERIODS'] = str(configuration.RUN_FOR_CLOCK_PERIODS)        
         # common:
         self.config['commonConfig']['CLOCK_PERIOD_EXTERNAL'] = configuration.CLOCK_PERIOD_EXTERNAL
-        self.config['commonConfig']['CLOCK_PERIOD_EXTERNAL_MIN_MS'] = str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS)
+        self.config['commonConfig']['CLOCK_PERIOD_EXTERNAL_MIN_MS'] = str('%.24f' % configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS).rstrip('0').rstrip('.')
+        self.config['commonConfig']['RESET_FOR_SECONDS'] = str('%.24f' % configuration.RESET_FOR_SECONDS).rstrip('0').rstrip('.')
         self.config['commonConfig']['CLOCK_PERIOD_VHDL_NS'] = configuration.CLOCK_PERIOD_VHDL_NS
         self.config['commonConfig']['FILE_PATH'] = configuration.FILE_PATH
+        self.config['commonConfig']['FIFO_PATH'] = configuration.FIFO_PATH
         self.config['commonConfig']['NR_DIS'] = str(configuration.NR_DIS)
         self.config['commonConfig']['MAX_NR_SW'] = str(configuration.MAX_NR_SW)
         self.config['commonConfig']['NR_SWITCHES'] = str(configuration.NR_SWITCHES)
