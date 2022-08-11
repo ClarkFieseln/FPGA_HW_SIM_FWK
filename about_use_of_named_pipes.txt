@@ -5,7 +5,7 @@ The use of FIFOs (named pipes) in this code is done as follows:
     - clock
 - VHDL to App:
     - DOs
-    - LEDs
+    - LEDs (not yet implemented)
 
 Note 1: using only shared files is possible but one CPU will be always at 100% polling the external clock.
         Instead, at least the external clock signal from the App shall be read in the VHDL code over a FIFO (named pipe) in order not to overload 1 core.
