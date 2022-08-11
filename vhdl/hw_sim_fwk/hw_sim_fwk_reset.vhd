@@ -13,8 +13,8 @@ use hw_sim_fwk.hw_sim_fwk_common.all;
 entity hw_sim_fwk_reset is
     generic(        
         FILE_PATH       : string  := "/tmp/";
-        RESET_FILE_NAME : string  := "/tmp/reset_high"; -- FILE_PATH & "reset_high" -- cannot use concatenation here!
-        PROTOCOL_RESET  : boolean := false -- to report details
+        RESET_FILE_NAME : string  := FILE_PATH & "reset_high";
+        PROTOCOL_RESET  : boolean := false
     );
     port(        
         clock     : in  std_logic;
@@ -37,15 +37,15 @@ begin
             if (work.hw_sim_fwk_common.file_exists(RESET_FILE_NAME) = true) then
                 hw_reset <= '1';
                 pos_level := true;
-                -- if (PROTOCOL_RESET = true) then
-                report "hw_reset initialized to 1";
-                -- end if;
+                if (PROTOCOL_RESET = true) then
+                    report "hw_reset initialized to 1";
+                end if;
             else
                 hw_reset <= '0';
                 pos_level := false;
-                -- if (PROTOCOL_RESET = true) then
-                report "hw_reset initialized to 0";
-                -- end if;
+                if (PROTOCOL_RESET = true) then
+                    report "hw_reset initialized to 0";
+                end if;
             end if;
         -- synchronous events
         -- Note: external simulator changes signals in "falling edge of clock"
@@ -54,15 +54,23 @@ begin
                 report "checking reset_rising/falling_edge..";
             end if;
             -- rising edge?
-            if pos_level = false then
-                if (file_exists(RESET_FILE_NAME) = true) then
+            if (file_exists(RESET_FILE_NAME) = true) then
+                if pos_level = false then
                     pos_level := true;
                     hw_reset <= '1';
+                    if (PROTOCOL_RESET = true) then
+                        report "reset = 1";
+                    end if;                    
                 end if;
             -- falling edge?
-            elsif (file_exists(RESET_FILE_NAME) = false) then
-                pos_level := false;
-                hw_reset <= '0';
+            else
+                if pos_level = true then
+                    pos_level := false;
+                    hw_reset <= '0';
+                    if (PROTOCOL_RESET = true) then
+                        report "reset = 0";
+                    end if;          
+                end if;          
             end if;
         end if;
     end process proc_update_reset;
