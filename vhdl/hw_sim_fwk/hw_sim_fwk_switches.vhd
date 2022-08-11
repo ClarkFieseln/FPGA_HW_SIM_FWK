@@ -15,8 +15,8 @@ entity hw_sim_fwk_switches is
     generic(
         NR_SWITCHES        : integer := 2;
         FILE_PATH          : string  := "/tmp/";
-        SWITCHES_FILE_NAME : string  := "/tmp/switch_high"; -- FILE_PATH & "switch_high" -- cannot use concatenation here!
-        PROTOCOL_SWITCHES  : boolean := false -- to report details
+        SWITCHES_FILE_NAME : string  := FILE_PATH & "switch_high";
+        PROTOCOL_SWITCHES  : boolean := false
     );
     port(
         reset     : in  std_logic;
