@@ -14,8 +14,8 @@ entity hw_sim_fwk_buttons is
     generic(
         NR_BUTTONS        : integer := 1;
         FILE_PATH         : string  := "/tmp/";
-        BUTTONS_FILE_NAME : string  := "/tmp/button_high"; -- FILE_PATH & "button_high" -- cannot use concatenation here!
-        PROTOCOL_BUTTONS  : boolean := false -- to report details
+        BUTTONS_FILE_NAME : string  := FILE_PATH & "button_high";
+        PROTOCOL_BUTTONS  : boolean := false
     );
     port(
         reset     : in  std_logic;
@@ -88,10 +88,4 @@ end arch;
 
 -- synthesis translate_on
 -- ######################
-
-
-
-
-
-
 
