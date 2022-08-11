@@ -5,9 +5,8 @@ from dataclasses import dataclass
 
 
 # Version format: MAJOR.MINOR.BUGFIX
-# 2022.03.26: initial project setup / application skeleton.
-VERSION = "1.0.0"
-VERSION_TOOL_TIP = "First release version containing basic set of features for demonstration purposes.\n\
+VERSION = "1.0.2"
+VERSION_TOOL_TIP = "Basic set of features for demonstration purposes in Windows using FIFOs (named pipes) and shared files.\n\
                     This PoC (Proof of Concept) still needs to be \"improved\" and \"un-extremed\"."
                     
 # LOGGING_LEVEL specifies the lowest-severity log message a logger will handle, where debug is the lowest built-in severity level and critical is the highest built-in severity.
@@ -61,9 +60,11 @@ CONFIG_FILENAME = "config.ini"
 
 # common configuration (to python and VHDL codes)
 CLOCK_PERIOD_EXTERNAL = "1000000000 ns" # 1 sec
-CLOCK_PERIOD_EXTERNAL_MIN_MS = 100
+CLOCK_PERIOD_EXTERNAL_MIN_MS = 0.0000000000001
+RESET_FOR_SECONDS = 0.1
 CLOCK_PERIOD_VHDL_NS = "20 ns" # to transform to time in FPGA time coordinates
 FILE_PATH = "C:/tmp/hw_sim_fwk/" #"/tmp/hw_sim_fwk/"
+FIFO_PATH = "\\\\.\\pipe\\"
 # general parameters
 MAX_NR_DI = 16
 NR_DIS = 10
