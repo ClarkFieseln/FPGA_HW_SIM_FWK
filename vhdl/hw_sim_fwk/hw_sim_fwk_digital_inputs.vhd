@@ -15,8 +15,8 @@ entity hw_sim_fwk_digital_inputs is
     generic(
         NR_DIS             : integer := 2;
         FILE_PATH          : string  := "/tmp/";
-        DIS_FILE_NAME      : string  := "/tmp/di_high"; -- FILE_PATH & "di_high" -- cannot use concatenation here!
-        PROTOCOL_DIS       : boolean := false -- to report details
+        DIS_FILE_NAME      : string  := FILE_PATH & "di_high";
+        PROTOCOL_DIS       : boolean := false
     );
     port(
         reset     : in  std_logic;
