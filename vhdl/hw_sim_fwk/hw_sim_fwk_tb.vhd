@@ -15,9 +15,11 @@ architecture arch of hw_sim_fwk_tb is
     -- constants for generic map:
     -- ##########################
     -- hw_sim_fwk_tb
+    constant USE_DI_FIFO                  : boolean := false; -- use only if all DIs are updated in every clock cycle
     constant SIMULATE_BUTTON_IN_TESTBENCH : boolean := false; -- otherwise button simulated externally
-    constant PROTOCOL                     : boolean := false; -- to report details
-    constant FILE_PATH                    : string  := "/tmp/hw_sim_fwk/"; -- "C:/tmp/hw_sim_fwk/";       
+    constant PROTOCOL                     : boolean := false; -- to report details    
+    constant FILE_PATH                    : string  := "C:/tmp/hw_sim_fwk/"; -- "/tmp/hw_sim_fwk/";
+    constant FIFO_PATH                    : string  := "\\.\pipe\";
     constant CLOCK_PERIOD                 : time    := 20 ns;
     -- modMCounter
     constant M                            : integer := 10;
@@ -26,35 +28,41 @@ architecture arch of hw_sim_fwk_tb is
     -- hw_sim_fwk_reset
     constant RESET_FILE_NAME              : string  := FILE_PATH & "reset_high";
     constant PROTOCOL_RESET               : boolean := false; -- to report details of external hw reset simulation
-    -- hw_sim_fwk_clock	 
-    constant CLOCK_FILE_NAME              : string  := FILE_PATH & "clock_high";
+    -- hw_sim_fwk_clock	     
+    constant CLOCK_FILE_NAME              : string  := FIFO_PATH & "clock";
     -- constant CLOCK_PERIOD_EXTERNAL : time := 1000000000 ns; -- 1 sec
     constant CLOCK_PERIOD_EXTERNAL        : time    := 100000000 ns; -- 100 ms = 0.1 sec
     -- constant CLOCK_PERIOD_EXTERNAL        : time    := 10000000 ns; -- 10 ms = 0.01 sec
     constant MAX_ELAPSED_CLOCK_PERIODS    : integer := (CLOCK_PERIOD_EXTERNAL / CLOCK_PERIOD) / 2;
-    constant PROTOCOL_CLOCK               : boolean := false; -- to report details of external hw clock simulation
+    constant PROTOCOL_CLOCK               : boolean := false;
+    -- if USE_DI_FIFO = true
+    -- hw_sim_fwk_digital_inputs_fifo
+    -- constant NR_DIS                       : integer := 10; 
+    -- constant DIS_FILE_NAME                : string := FIFO_PATH & "di_";
+    -- constant PROTOCOL_DIS                 : boolean := false;
+    -- if USE_DI_FIFO = false
     -- hw_sim_fwk_digital_inputs
-    constant NR_DIS                       : integer := 4; -- 64; -- 16; -- 2;
+    constant NR_DIS                       : integer := 10;
     constant DIS_FILE_NAME                : string  := FILE_PATH & "di_high";
-    constant PROTOCOL_DIS                 : boolean := false; -- to report details of external hw digital inputs simulation
+    constant PROTOCOL_DIS                 : boolean := false;
+    -- end generate g_use_di_fifo;
     -- hw_sim_fwk_switches
-    constant NR_SWITCHES                  : integer := 10; -- 64; -- 16; -- 2;
+    constant NR_SWITCHES                  : integer := 10;
     constant SWITCHES_FILE_NAME           : string  := FILE_PATH & "switch_high";
-    constant PROTOCOL_SWITCHES            : boolean := false; -- to report details of external hw switches simulation
+    constant PROTOCOL_SWITCHES            : boolean := false;
     -- hw_sim_fwk_buttons
-    constant NR_BUTTONS                   : integer := 10; -- 4; -- 64; -- 1;
+    constant NR_BUTTONS                   : integer := 10;
     constant BUTTONS_FILE_NAME            : string  := FILE_PATH & "button_high";
-    constant PROTOCOL_BUTTONS             : boolean := false; -- to report details of external hw buttons simulation
+    constant PROTOCOL_BUTTONS             : boolean := false;
     -- hw_sim_fwk_leds
-    constant NR_LEDS                      : integer := 10; -- 4; -- 64; -- 16; -- 2;
+    constant NR_LEDS                      : integer := 10;
     constant LEDS_ON_FILE_NAME            : string  := FILE_PATH & "led_on";
     constant LEDS_OFF_FILE_NAME           : string  := FILE_PATH & "led_off";
-    constant PROTOCOL_LEDS                : boolean := false; -- to report details of external hw leds simulation
+    constant PROTOCOL_LEDS                : boolean := false;
     -- hw_sim_fwk_digital_outputs
-    constant NR_DOS                       : integer := 4; -- 64; -- 16; -- 2;
-    constant DOS_HIGH_FILE_NAME           : string  := FILE_PATH & "do_high";
-    constant DOS_LOW_FILE_NAME            : string  := FILE_PATH & "do_low";
-    constant PROTOCOL_DOS                 : boolean := false; -- to report details of external hw digital outputs simulation
+    constant NR_DOS                       : integer := 10;
+    constant DOS_FILE_NAME                : string  := FIFO_PATH & "do_";
+    constant PROTOCOL_DOS                 : boolean := false;
     -- signals:
     -- common signals
     -- ##############
@@ -91,11 +99,11 @@ architecture arch of hw_sim_fwk_tb is
     -- signal my_integer : integer;  -- see TODO further below     
 begin
     -- asserts
-    -- TODO: check this, right syntax? right place in code?
-    --       use: string variable for report?
-    -- msg : string(1 to 128) := "Unequal nr. of LEDs, switches, buttons = " & integer'image(NR_LEDS) & ", " & integer'image(NR_SWITCHES) & ", " & integer'image(NR_BUTTONS);
     assert ((NR_LEDS = NR_BUTTONS) and (NR_BUTTONS = NR_SWITCHES)) report ("Unequal nr. of LEDs, switches, buttons = " & integer'image(NR_LEDS) & ", " & integer'image(NR_SWITCHES) & ", " & integer'image(NR_BUTTONS)) severity failure;
 
+    -- INSTANTIATIONS
+    -- ##############
+    
     -- instantiate hw reset simulated externally
     -- #########################################
     hw_sim_fwk_reset_unit : entity hw_sim_fwk_reset
@@ -109,34 +117,35 @@ begin
             hw_reset => reset_tb
         ); 
         
-    -- instantiate hw clock simulated externally
-    -- *** hw_clock from HW-simulation-framework drives clock of the synthesizable modules ***
-    -- #######################################################################################
-    hw_sim_fwk_clock_unit : entity hw_sim_fwk_clock
-        generic map(
-            FILE_PATH                 => FILE_PATH,
-            CLOCK_FILE_NAME           => CLOCK_FILE_NAME,
-            CLOCK_PERIOD              => CLOCK_PERIOD,
-            PROTOCOL_CLOCK            => PROTOCOL_CLOCK
-        )
-        port map(
-            hw_clock => hw_clock_tb
-        );
-
     -- instantiate hw digital inputs simulated externally
     -- ##################################################
-    hw_sim_fwk_digital_inputs_unit : entity hw_sim_fwk_digital_inputs
-        generic map(
-            NR_DIS             => NR_DIS,
-            FILE_PATH          => FILE_PATH,
-            DIS_FILE_NAME      => DIS_FILE_NAME,
-            PROTOCOL_DIS       => PROTOCOL_DIS
-        )
-        port map(
-            reset     => reset_tb,
-            clock     => hw_clock_tb,
-            hw_di     => di_tb
-        );
+    g_instantiate_di_fifo : if USE_DI_FIFO = true generate
+        hw_sim_fwk_digital_inputs_unit : entity hw_sim_fwk_digital_inputs_fifo
+            generic map(
+                NR_DIS             => NR_DIS,
+                FIFO_PATH          => FIFO_PATH,
+                DIS_FILE_NAME      => DIS_FILE_NAME,
+                PROTOCOL_DIS       => PROTOCOL_DIS
+            )
+            port map(
+                reset     => reset_tb,
+                clock     => hw_clock_tb,
+                hw_di     => di_tb
+            );
+    else generate
+        hw_sim_fwk_digital_inputs_unit : entity hw_sim_fwk_digital_inputs
+            generic map(
+                NR_DIS             => NR_DIS,
+                FILE_PATH          => FILE_PATH,
+                DIS_FILE_NAME      => DIS_FILE_NAME,
+                PROTOCOL_DIS       => PROTOCOL_DIS
+            )
+            port map(
+                reset     => reset_tb,
+                clock     => hw_clock_tb,
+                hw_di     => di_tb
+            );
+    end generate g_instantiate_di_fifo;
         
     -- instantiate hw switches simulated externally
     -- ############################################
@@ -203,21 +212,20 @@ begin
             clock  => hw_clock_tb,
             hw_led => led_tb
         );
-        
+    
     -- instantiate hw digital outputs simulated externally
     -- ###################################################
     hw_sim_fwk_digital_outputs_unit : entity hw_sim_fwk_digital_outputs
         generic map(
             NR_DOS             => NR_DOS,
-            FILE_PATH          => FILE_PATH,
-            DOS_HIGH_FILE_NAME => DOS_HIGH_FILE_NAME,
-            DOS_LOW_FILE_NAME  => DOS_LOW_FILE_NAME,
+            FIFO_PATH          => FIFO_PATH,
+            DOS_FILE_NAME      => DOS_FILE_NAME,
             PROTOCOL_DOS       => PROTOCOL_DOS
         )  
         port map(
-            reset => reset_tb,
-            clock => hw_clock_tb,
-            hw_do => do_tb
+            reset_in => reset_tb,
+            clock_in => hw_clock_tb,
+            hw_do_in => do_tb
         );
     
     -- instantiate top_module
@@ -250,7 +258,21 @@ begin
             di_in             => di_tb,
             do_out            => do_tb
         );
-
+        
+    -- instantiate hw clock simulated externally
+    -- hw_clock from HW-simulation-framework drives clock of the synthesizable modules
+    -- ###############################################################################
+    hw_sim_fwk_clock_unit : entity hw_sim_fwk_clock
+        generic map(
+            FIFO_PATH                 => FIFO_PATH,
+            CLOCK_FILE_NAME           => CLOCK_FILE_NAME,
+            CLOCK_PERIOD              => CLOCK_PERIOD,
+            PROTOCOL_CLOCK            => PROTOCOL_CLOCK
+        )
+        port map(
+            hw_clock => hw_clock_tb
+        );
+               
     -- report detection of rising and falling edges of clock
     -- #####################################################
     proc_status_hw_clock : process(hw_clock_tb)
@@ -268,20 +290,21 @@ begin
         end if;
     end process proc_status_hw_clock;
     
+    -- PROCESSES 
+    -- #########
+    
     -- report detection of rising and falling edges of digital inputs
     -- ##############################################################
     proc_status_hw_di : process(di_tb)
     begin
-        if PROTOCOL = true then         -- NOTE: use if PROTOCOL_DIS alternatively..
+        if PROTOCOL = true then
             if rising_edge(di_tb(0)) then
                 report "simulated HW di(0) source with rising edge!";
             elsif falling_edge(di_tb(0)) then
                 report "simulated HW di(0) source with falling edge!";
             else
                 report "simulated HW di(0) source neither rising nor falling edge!";
-            end if;
-            -- else
-            -- finish/leave/stop process -> how? TODO: check this..		
+            end if;	
         end if;
     end process proc_status_hw_di;
 
@@ -289,7 +312,7 @@ begin
     -- ########################################################
     proc_status_hw_switch : process(switch_tb)
     begin
-        if PROTOCOL = true then         -- NOTE: use if PROTOCOL_SWITCHES alternatively..
+        if PROTOCOL = true then
             if rising_edge(switch_tb(0)) then
                 report "simulated HW switch(0) source with rising edge!";
             elsif falling_edge(switch_tb(0)) then
@@ -297,8 +320,6 @@ begin
             else
                 report "simulated HW switch(0) source neither rising nor falling edge!";
             end if;
-            -- else
-            -- finish/leave/stop process -> how? TODO: check this..		
         end if;
     end process proc_status_hw_switch;
 
@@ -306,16 +327,14 @@ begin
     -- #######################################################
     proc_status_hw_buttons : process(button_tb)
     begin
-        if PROTOCOL = true then         -- NOTE: use if PROTOCOL_BUTTONS alternatively..
+        if PROTOCOL = true then
             if rising_edge(button_tb(0)) then
                 report "simulated HW button 0 source with rising edge!";
             elsif falling_edge(button_tb(0)) then
                 report "simulated HW button 0 source with falling edge!";
             else
                 report "simulated HW button 0 source neither rising nor falling edge!";
-            end if;
-            -- else
-            -- finish/leave/stop process -> how? TODO: check this..		
+            end if;	
         end if;
     end process proc_status_hw_buttons;
 
@@ -323,16 +342,14 @@ begin
     -- ####################################################
     proc_status_hw_leds : process(led_tb)
     begin
-        if PROTOCOL = true then         -- NOTE: use if PROTOCOL_LED alternatively..
+        if PROTOCOL = true then
             if rising_edge(led_tb(0)) then
                 report "simulated HW led 0 source with rising edge!";
             elsif falling_edge(led_tb(0)) then
                 report "simulated HW led 0 source with falling edge!";
             else
                 report "simulated HW led 0 source neither rising nor falling edge!";
-            end if;
-            -- else
-            -- finish/leave/stop process -> how? TODO: check this..		
+            end if;	
         end if;
     end process proc_status_hw_leds;
     
@@ -340,16 +357,14 @@ begin
     -- ###############################################################
     proc_status_hw_dos : process(do_tb)
     begin
-        if PROTOCOL = true then         -- NOTE: use if PROTOCOL_DO alternatively..
+        if PROTOCOL = true then
             if rising_edge(do_tb(0)) then
                 report "simulated HW digital output 0 source with rising edge!";
             elsif falling_edge(do_tb(0)) then
                 report "simulated HW digital output 0 source with falling edge!";
             else
                 report "simulated HW digital output 0 source neither rising nor falling edge!";
-            end if;
-            -- else
-            -- finish/leave/stop process -> how? TODO: check this..		
+            end if;	
         end if;
     end process proc_status_hw_dos;
 
@@ -362,7 +377,7 @@ begin
         write(my_line, 16);
         writeline(output, my_line);
         -- TODO: 
-        --       check how to input from stdin to iSim,
+        --       check how to input from stdin to iSim or VIVADO,
         --       it works fine when using GHDL.
         --       readline() blocks until user input ended with return hit.
         -- readline(input, my_line);
@@ -396,11 +411,6 @@ begin
             end if;
         end process proc_testbench_main;
     end generate g_conditional_tb_button_simulation_3oo3;
-
-    -- keep on counting from start
-    -- NOTE: commented as this is done in the external HW simulation
-    -- #############################################################  
-    -- reset_tb <= '1', '0' after T / 2;   --reset long enough!!
 end arch;
 
 
