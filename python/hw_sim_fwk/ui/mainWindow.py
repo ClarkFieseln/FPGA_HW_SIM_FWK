@@ -3,7 +3,7 @@
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5 import QtGui, QtWidgets, QtCore
-from PyQt5.QtGui import QFont, QIntValidator
+from PyQt5.QtGui import QFont, QIntValidator, QDoubleValidator
 from time import gmtime, strftime
 from .Ui_mainWindow import Ui_MainWindow
 import configuration
@@ -17,17 +17,32 @@ import time
 import random
 from sys import platform
 from playsound import playsound
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import tkinter
 import tkinter.messagebox
 from tkinter import filedialog
 import functools
+from threading import Lock
+if platform == "win32":
+    import win32pipe, win32file, pywintypes
+
+
+# TEST
+#############
+import timeit
+#############
+
 
 # TODOs:
-# - test on Windows11 (problems with access to shared files?)
-# - plot signals
+# - remove # TEST code...
+# - improve architecture (mainWindow.py is completely overloaded!)
 # - add analog sensor (e.g. CPU load)
+# - plot signals
+# - add analog readings from file (reproducible tests!)
 # - add serial communication (UART, SPI, I2C,..) e.g. to pass sensor values
+# - improve VHDL code: use blocks, etc.
+# - improve performance: use profiler to get rid of bottlenecks
+
 
 # NOTE: we need root so we can close the messagebox
 root = tkinter.Tk()
@@ -44,12 +59,20 @@ cf = currentframe()
 FILE_NAME_RESET_HIGH = None
 FILE_NAME_RESET_LOW = None
 FILE_NAME_CLOCK = None
-FILE_NAME_DI_HIGH = []
-FILE_NAME_DI_LOW = []
+# NOTE: using a FIFO to pass data from Python-App to VHDL-Code means that the complete VHDL simulation (in VIVADO) is
+#       "blocked" waiting to receive this data, even if called in a separate "concurrent" (?) process.
+#       Therefore, using a FIFO is recommended only in cases where all DIs are updated in every clock cycle.
+# *********
+USE_DI_FIFO = False # NOTE: this parameter is not in config.ini
+# *********
+if USE_DI_FIFO:
+    FILE_NAME_DI = []
+else:
+    FILE_NAME_DI_HIGH = []
+    FILE_NAME_DI_LOW = []
 SYNC_DI = []
 ASYNC_DI = []
-FILE_NAME_DO_HIGH = []
-FILE_NAME_DO_LOW = []
+FILE_NAME_DO = []
 FILE_NAME_SW_HIGH = []
 FILE_NAME_SW_LOW = []
 FILE_NAME_BTN_HIGH = []
@@ -65,18 +88,36 @@ LED_PERIOD_SEC = None
 DO_PERIOD_SEC = None
 
 
+
+# TODO: solve the bug before use: if user presses OK then it hangs!
+def timed_messagebox(message, type='info', timeout=3000):
+    root = tkinter.Tk()
+    root.withdraw()
+    try:
+        root.after(timeout, root.destroy)
+        if type == 'info':
+            tkinter.messagebox.showinfo('Info', message, master=root)
+        elif type == 'warning':
+            tkinter.messagebox.showwarning('Warning', message, master=root)
+        elif type == 'error':
+            tkinter.messagebox.showerror('Error', message, master=root)
+    except:
+        pass
+
 # here only variables/definitions are changed
 # in updateGuiConfig() we change also GUI and other derived things.
 def updateGuiDefs():
     global FILE_NAME_RESET_HIGH
     global FILE_NAME_RESET_LOW
     global FILE_NAME_CLOCK
-    global FILE_NAME_DI_HIGH
-    global FILE_NAME_DI_LOW
+    if USE_DI_FIFO:
+        global FILE_NAME_DI
+    else:
+        global FILE_NAME_DI_HIGH
+        global FILE_NAME_DI_LOW
     global SYNC_DI
     global ASYNC_DI
-    global FILE_NAME_DO_HIGH
-    global FILE_NAME_DO_LOW
+    global FILE_NAME_DO
     global FILE_NAME_SW_HIGH
     global FILE_NAME_SW_LOW
     global FILE_NAME_BTN_HIGH
@@ -103,7 +144,7 @@ def updateGuiDefs():
     FILE_NAME_RESET_HIGH = configuration.FILE_PATH + "reset_high"
     FILE_NAME_RESET_LOW = configuration.FILE_PATH + "reset_low"
     # clock
-    FILE_NAME_CLOCK = configuration.FILE_PATH + "clock"
+    FILE_NAME_CLOCK = configuration.FIFO_PATH + "clock"
     # check max nr. of DIs and DOs  
     if configuration.NR_DIS > configuration.MAX_NR_DI:
         configuration.NR_DIS = configuration.MAX_NR_DI
@@ -118,13 +159,19 @@ def updateGuiDefs():
             configuration.MAX_NR_DO))
         root.update()
     # digital inputs
-    FILE_NAME_DI_HIGH_PART = configuration.FILE_PATH + "di_high_"  # temporary variable
-    FILE_NAME_DI_LOW_PART = configuration.FILE_PATH + "di_low_"  # temporary variable
-    FILE_NAME_DI_HIGH = []
-    FILE_NAME_DI_LOW = []
-    for i in range(configuration.NR_DIS):
-        FILE_NAME_DI_HIGH.append(FILE_NAME_DI_HIGH_PART + str(i))
-        FILE_NAME_DI_LOW.append(FILE_NAME_DI_LOW_PART + str(i))
+    if USE_DI_FIFO:
+        FILE_NAME_DI_PART = configuration.FIFO_PATH + "di_"  # temporary variable
+        FILE_NAME_DI = []
+        for i in range(configuration.NR_DIS):
+            FILE_NAME_DI.append(FILE_NAME_DI_PART + str(i))
+    else:
+        FILE_NAME_DI_HIGH_PART = configuration.FILE_PATH + "di_high_"  # temporary variable
+        FILE_NAME_DI_LOW_PART = configuration.FILE_PATH + "di_low_"  # temporary variable
+        FILE_NAME_DI_HIGH = []
+        FILE_NAME_DI_LOW = []
+        for i in range(configuration.NR_DIS):
+            FILE_NAME_DI_HIGH.append(FILE_NAME_DI_HIGH_PART + str(i))
+            FILE_NAME_DI_LOW.append(FILE_NAME_DI_LOW_PART + str(i))
     SYNC_DI = []
     ASYNC_DI = []
     for i in range(configuration.NR_SYNC_DI):
@@ -132,13 +179,10 @@ def updateGuiDefs():
     for i in range(configuration.NR_ASYNC_DI):
         ASYNC_DI.append(configuration.NR_ASYNC_DI + i)
     # digital outputs
-    FILE_NAME_DO_HIGH_PART = configuration.FILE_PATH + "do_high_"  # temporary variable
-    FILE_NAME_DO_LOW_PART = configuration.FILE_PATH + "do_low_"  # temporary variable
-    FILE_NAME_DO_HIGH = []
-    FILE_NAME_DO_LOW = []
+    FILE_NAME_DO_PART = configuration.FIFO_PATH + "do_"  # temporary variable
+    FILE_NAME_DO = []
     for i in range(configuration.NR_DOS):
-        FILE_NAME_DO_HIGH.append(FILE_NAME_DO_HIGH_PART + str(i))
-        FILE_NAME_DO_LOW.append(FILE_NAME_DO_LOW_PART + str(i))
+        FILE_NAME_DO.append(FILE_NAME_DO_PART + str(i))
     # switches        
     if configuration.NR_SWITCHES > configuration.MAX_NR_SW:
         configuration.NR_SWITCHES = configuration.MAX_NR_SW
@@ -175,15 +219,22 @@ def updateGuiDefs():
     for i in range(configuration.NR_LEDS):
         FILE_NAME_LED_ON.append(FILE_NAME_LED_ON_PART + str(i))
         FILE_NAME_LED_OFF.append(FILE_NAME_LED_OFF_PART + str(i))
-        # check ranges
-    if configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS <= 0:
+    # check ranges
+    if configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS <= 0.0:
         # NOTE: 100 ms hardcoded rescue value.
-        configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS = 100
+        configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS = 100.0
         logging.error("min. clock period shall be greater than zero. Now set to value = 100 ms")
         tkinter.messagebox.showerror(title="ERROR",
                                      message="min. clock period shall be greater than zero. Now set to value = 100 ms")
         root.update()
-    if int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) <= 0:
+    if configuration.RESET_FOR_SECONDS <= 0.0:
+        # NOTE: 100 ms hardcoded rescue value.
+        configuration.RESET_FOR_SECONDS = 0.1
+        logging.error("min. reset time shall be greater than zero. Now set to value = 1 ms")
+        tkinter.messagebox.showerror(title="ERROR",
+                                     message="min. reset time shall be greater than zero. Now set to value = 1 ms")
+        root.update()
+    if float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) <= 0.0:
         configuration.CLOCK_PERIOD_EXTERNAL = str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS) + " ms"
         logging.error("clock period shall be greater than zero. Now set to minimum value = " + str(
             configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS) + " ms")
@@ -193,21 +244,21 @@ def updateGuiDefs():
         root.update()
     # NOTE: CLOCK_PERIOD_SEC corresponds exactly to one period in VHDL code.
     if " fs" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000000000
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000000000.0
     elif " ps" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000000
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000000.0
     elif " ns" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000.0
     elif " us" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000.0
     elif " ms" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000.0
     elif " sec" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])
     elif " min" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) * 60
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) * 60.0
     elif " min" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) * 3600
+        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) * 3600.0
     else:
         logging.error("Error: unknown time units in CLOCK_PERIOD_EXTERNAL!")
         traceback.print_exc()
@@ -248,14 +299,12 @@ def init_file_path():
 
 
 def createTempFiles():
-    # remove temporary files with "active" value: in this case HIGH, ON,..
     if os.path.exists(FILE_NAME_RESET_HIGH):
         os.remove(FILE_NAME_RESET_HIGH)
-    if os.path.exists(FILE_NAME_CLOCK):
-        os.remove(FILE_NAME_CLOCK)
-    for i in range(configuration.NR_DIS):
-        if os.path.exists(FILE_NAME_DI_HIGH[i]):
-            os.remove(FILE_NAME_DI_HIGH[i])
+    if USE_DI_FIFO == False:
+        for i in range(configuration.NR_DIS):
+            if os.path.exists(FILE_NAME_DI_HIGH[i]):
+                os.remove(FILE_NAME_DI_HIGH[i])
     for i in range(configuration.NR_SWITCHES):
         f = open(FILE_NAME_SW_LOW[i], "w+")
         f.close()
@@ -267,17 +316,6 @@ def createTempFiles():
     for i in range(configuration.NR_LEDS):
         if os.path.exists(FILE_NAME_LED_ON[i]):
             os.remove(FILE_NAME_LED_ON[i])
-    for i in range(configuration.NR_DOS):
-        if os.path.exists(FILE_NAME_DO_HIGH[i]):
-            os.remove(FILE_NAME_DO_HIGH[i])
-    # create temporary files with "inactive" value: in this case LOW, OFF,..
-    f = open(FILE_NAME_RESET_LOW, "w+")
-    f.close()
-    if os.path.exists(FILE_NAME_CLOCK) == False:
-        os.mkfifo(FILE_NAME_CLOCK)
-    for i in range(configuration.NR_DIS):
-        f = open(FILE_NAME_DI_LOW[i], "w+")
-        f.close()
     for i in range(configuration.NR_SWITCHES):
         f = open(FILE_NAME_SW_LOW[i], "w+")
         f.close()
@@ -286,9 +324,6 @@ def createTempFiles():
         f.close()
     for i in range(configuration.NR_LEDS):
         f = open(FILE_NAME_LED_OFF[i], "w+")
-        f.close()
-    for i in range(configuration.NR_DOS):
-        f = open(FILE_NAME_DO_LOW[i], "w+")
         f.close()
 
 
@@ -304,6 +339,7 @@ evt_do_step = threading.Event()
 # NOTE: we use threading.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
 #       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
 evt_wake_up = threading.Event()
+evt_clock = threading.Event()
 # these events improve performance by indicating exactly when the GUI shall update which widgets.
 evt_gui_di_update = threading.Event()
 evt_gui_do_update = threading.Event()
@@ -313,12 +349,91 @@ evt_gui_remain_run_time_update = threading.Event()
 # update GUI definitions
 updateGuiDefs()
 
-# file path
+# initialize file path
 init_file_path()
 
-# create temporary files
-createTempFiles()
+# helper function to create a fifo (named pipe) for writing
+def create_w_fifo(FILE_NAME):
+    fifo_w = None
+    if os.path.exists(FILE_NAME) == False:
+        # Windows
+        if (platform == "win32"):
+            try:
+                fifo_w = win32pipe.CreateNamedPipe(
+                    FILE_NAME,
+                    win32pipe.PIPE_ACCESS_OUTBOUND, # | win32pipe.FILE_FLAG_OVERLAPPED,  # win32pipe.PIPE_ACCESS_DUPLEX,
+                    # the pipe treats the bytes written during each write operation as a message unit:
+                    ##################################################################################
+                    win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT, # win32pipe.PIPE_NOWAIT,
+                    # pipe as a stream of bytes:
+                    ############################
+                    # win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_READMODE_BYTE | win32pipe.PIPE_WAIT, # win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
+                    1, 65536, 65536,
+                    win32pipe.NMPWAIT_USE_DEFAULT_WAIT,  # 0,
+                    None)
+            except pywintypes.error as e:
+                logging.error("could not create pipe for " + FILE_NAME)
+                exit(cf.f_lineno)
+        # Linux
+        else:
+            os.mkfifo(FILE_NAME)
+    # open fifos (named pipes)
+    # NOTE: this is possible only after we send RESET and CLOCK to VHDL Code
+    ########################################################################
+    # TODO: check if we need to close them and where
+    if platform == "win32":
+        try:
+            logging.debug("waiting for client")
+            win32pipe.ConnectNamedPipe(fifo_w, None)
+            logging.debug("got client")
+        except:
+            win32file.CloseHandle(fifo_w)
+            logging.error("could not connect to pipe of " + FILE_NAME)
+            exit(cf.f_lineno)
+    else:
+        fifo_w = open(FILE_NAME, 'w')
+    # return value
+    return fifo_w
 
+
+# helper function to create a fifo (named pipe) for reading
+def create_r_fifo(FILE_NAME):
+    fifo_r = None
+    if platform == "win32":
+        try:
+            print("client, create read named_pipe = " + FILE_NAME)
+            fifo_r = win32pipe.CreateNamedPipe(
+                FILE_NAME,
+                win32pipe.PIPE_ACCESS_INBOUND,  # win32pipe.PIPE_ACCESS_DUPLEX,
+                # the pipe treats the bytes written during each write operation as a message unit:
+                ##################################################################################
+                win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
+                # pipe as stream of bytes:
+                ##########################
+                # win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_READMODE_BYTE | win32pipe.PIPE_WAIT,
+                1, 65536, 65536,
+                win32pipe.NMPWAIT_USE_DEFAULT_WAIT,  # 0,
+                None)
+            try:
+                logging.info("waiting for client (or VHDL-server?) for " + FILE_NAME)
+                win32pipe.ConnectNamedPipe(fifo_r, None)
+                logging.info("got client for " + FILE_NAME + " with handle/fifo = " + str(fifo_r))
+            except:
+                logging.error("could not connect to pipe of " + FILE_NAME)
+                win32file.CloseHandle(fifo_r)
+                exit(cf.f_lineno)
+        except pywintypes.error as e:
+            if e.args[0] == 109:
+                print("broken pipe, bye bye")
+            else:
+                print("Error" + str(e))
+            exit(cf.f_lineno)
+    else:
+        if os.path.exists(FILE_NAME == False):
+            os.mkfifo(FILE_NAME)
+        fifo_r = open(FILE_NAME, 'r')
+    # return value
+    return fifo_r
 
 # main window
 #############
@@ -337,15 +452,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     toggle_di = True
     remaining_time_to_run = 0
     di_count = 0
-    DI_HIGH = []
+
+    DI_HIGH = [] # value set "synchronously" with "asynchronous" variable in FIFO_W_DI_HIGH[]
+    FIFO_W_DI_HIGH = [] # value written to FIFO (named pipe), set by python code
     for i in range(configuration.NR_DIS):
         DI_HIGH.append(0)
-    DO_HIGH = []
+        FIFO_W_DI_HIGH.append(0)
+
+    DO_HIGH = [] # value set "synchronously" with "asynchronous" variable in FIFO_R_DO_HIGH[]
+    FIFO_R_DO_HIGH = [] # value read from FIFO (named pipe), set by VHDL code
     for i in range(configuration.NR_DOS):
         DO_HIGH.append(0)
+        FIFO_R_DO_HIGH.append(0)
+
     LED_ON = []
     for i in range(configuration.NR_LEDS):
         LED_ON.append(0)
+
     # widgets:
     pbKeepPbPressed = None
     button = []
@@ -361,11 +484,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # evt_set_led_on = []
     # evt_set_led_off = []
 
-    # open fifos (named pipes)
-    ##########################
-    # TODO: check if we need to close them and where
-    fifo_w_clock = open(FILE_NAME_CLOCK, 'w')
-    print("done")
+    # information message in terminal
+    logging.info("INFO: start the VHDL tool if not yet started..GUI will then show up!")
+    # information message in messagebox
+    # TODO: solve bug before use: timed_messagebox("start the VHDL simulator if not done yet..GUI will then show up!", timeout=7000)
+    tkinter.messagebox.showinfo(title="INFORMATION", message="Please start the VHDL tool if not yet started!")
+    root.update()
+
+    # create temporary files with "inactive" value: in this case LOW, OFF,..
+    f = open(FILE_NAME_RESET_LOW, "w+")
+    f.close()
+
+    # FIFO for clock
+    fifo_w_clock = None # create_w_fifo(FILE_NAME_CLOCK)
+
+    fifo_r_do = []
+    lock_r_do = [] # lock to access FIFO_R_DO_HIGH[]
+    # fill with None or 0 for now...initialization in threads instead.
+    for i in range(configuration.NR_DOS):
+        fifo_r_do.append(0) # None) # open(FILE_NAME_DO[i], 'r'))
+        lock_r_do.append(Lock())
+    fifo_w_di = []
+    lock_w_di = [] # lock to access FIFO_W_DI_HIGH[]
+    # fill with None for now...initialization in threads instead.
+    for i in range(configuration.NR_DIS):
+        fifo_w_di.append(0) # None) # open(FILE_NAME_DI[i], 'w'))
+        lock_w_di.append(Lock())
+
+    # TEST
+    #############
+    freq = 0
+    nr_cycles = 0
+    #############
 
     ######################################################################################
     # NOTE: we don't modify GUI objects from a QThread
@@ -376,7 +526,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     class MyGuiUpdateThread(QThread):
         logging.info("Thread MyGuiUpdateThread starting")
         updated = pyqtSignal(str)
-
         def run(self):
             logging.info("MyGuiUpdateThread:run()")
             while True:
@@ -386,6 +535,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # thread to update GUI
     ######################
     def updateGui(self):
+
+
+        # TEST
+        ##################################################
+        # print(str(int(self.freq))+","+str(self.nr_cycles))
+        ##################################################
+
+
         # update status on GUI
         ######################
         if (self.lblStatus is not None):
@@ -434,6 +591,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     ###########################################
     def thread_scheduler(self, name):
         logging.info("Thread %s starting", name)
+        # create FIFO for clock
+        # (blocking call)
+        self.fifo_w_clock = create_w_fifo(FILE_NAME_CLOCK)
         # nr. of counted clock periods
         clock_periods = 0
         # main loop (toggle signal and sleep)
@@ -447,8 +607,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # handle digital inputs
                     #######################
                     if clock_periods % configuration.DI_PER_IN_CLK_PER == 0:
-                        # NOTE: uncomment of these options:
-                        # self.do_di_toggle() 
+                        # NOTE: uncomment one of these options:
+                        # self.do_di_toggle()
                         self.do_di_count()
                     # handle switches
                     #################
@@ -464,14 +624,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # NOTE: it is important to schedule all tasks first before emulating a clock change
                     ###################################################################################
                     self.clock_high = False
-                    self.fifo_w_clock.write("0\r\n")
-                    self.fifo_w_clock.flush()
+                    # write clock = 0 = LOW
+                    if platform == "win32":
+                        win32file.WriteFile(self.fifo_w_clock, str.encode("0")) # \r\n"))
+                    else:
+                        self.fifo_w_clock.write("0\r\n")
+                        self.fifo_w_clock.flush()
                 else:
                     # handle clock - raising edge
                     #############################
                     self.clock_high = True
-                    self.fifo_w_clock.write("1\r\n")
-                    self.fifo_w_clock.flush()
+                    # write clock = 1 = HIGH
+                    if platform == "win32":
+                        win32file.WriteFile(self.fifo_w_clock, str.encode("1")) # \r\n"))
+                    else:
+                        self.fifo_w_clock.write("1\r\n")
+                        self.fifo_w_clock.flush()
                     # handle digital outputs
                     ########################
                     self.do_do()
@@ -481,7 +649,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # increment clock periods
                     #########################
                     clock_periods = clock_periods + 1
-
                 # log to csv
                 ############
                 if configuration.LOG_TO_CSV == True:
@@ -492,16 +659,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # wait without consuming resources
             ##################################
             if (evt_pause.is_set()) == True:
-                evt_resume.wait(999999)
+                evt_resume.wait()
             elif (evt_step_on.is_set() == True):
                 if self.clock_high == False:
                     while evt_step_on.is_set() == True and evt_do_step.is_set() == False:
                         evt_do_step.wait(CLOCK_PERIOD_SEC / 2)
                 else:
                     evt_do_step.clear()  # step done!
-                    evt_wake_up.wait(CLOCK_PERIOD_SEC / 2 - (time.time() - current_time))
+                    evt_clock.wait()
+                    evt_clock.clear()
             else:
-                evt_wake_up.wait(CLOCK_PERIOD_SEC / 2 - (time.time() - current_time))
+                # TEST
+                ###################################
+                self.nr_cycles = self.nr_cycles + 1
+                tdiff = time.time() - current_time
+                if tdiff != 0:
+                    self.freq = 1/(tdiff)
+                ###################################
+                evt_clock.wait()
+                evt_clock.clear()
 
     def __init__(self, qApplication, parent=None, sdm_arg=None):
         # call super
@@ -525,16 +701,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # setup Ui
         self.setupUi(self)
         # further Ui setup
+        self.tabWidget.setCurrentIndex(self.tabWidget.indexOf(self.tab_fpga)) # default tab is tab_fpga
         self.cbLogOnPowerOnOff.setToolTip("Log over power on/off in a single file if checked.")
         self.leFilePath.setText(configuration.FILE_PATH)
+        self.leFifoPath.setText(configuration.FIFO_PATH)
         self.leClkPeriods.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
         self.leClkPeriods.setValidator(QIntValidator())
         self.leClkPeriodMs.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
-        self.leClkPeriodMs.setValidator(QIntValidator())
+        # TODO: check why this validator is not working, impeding correct input on GUI
+        # self.leClkPeriodMs.setValidator(QDoubleValidator()) # self.leClkPeriodMs.setValidator(QIntValidator())
         self.leGuiRefreshHz.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
         self.leGuiRefreshHz.setValidator(QIntValidator())
         self.leMinClockPeriodMs.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
-        self.leMinClockPeriodMs.setValidator(QIntValidator())
+        # TODO: check why this validator is not working, impeding correct input on GUI
+        # self.leMinClockPeriodMs.setValidator(QDoubleValidator()) # (QIntValidator())
+        self.leResetSecs.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        # TODO: check why this validator is not working, impeding correct input on GUI
+        # self.leResetSecs.setValidator(QDoubleValidator()) # (QIntValidator())
         self.leMaxDiCount.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
         self.leMaxDiCount.setValidator(QIntValidator())
         self.leDiPerInClkPer.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
@@ -550,6 +733,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.cbShowLiveStatus.setChecked(configuration.SHOW_LIVE_STATUS)
         self.cbLoggingOn.setChecked(configuration.LOG_TO_CSV)
         self.leMinClockPeriodMs.setText(str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS))
+        self.leResetSecs.setText(str(configuration.RESET_FOR_SECONDS))
         self.cbLogOnPowerOnOff.setChecked(configuration.LOG_ON_POWER_ON_OFF)
         self.leMaxDiCount.setText(str(configuration.MAX_DI_COUNT))
         self.leDiPerInClkPer.setText(str(configuration.DI_PER_IN_CLK_PER))
@@ -718,12 +902,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # button events
             self.evt_set_switch_on.append(threading.Event())
             self.evt_set_switch_off.append(threading.Event())
-        # leds
+        # LEDs
         icon_led = QtGui.QIcon()
         icon_led.addPixmap(QtGui.QPixmap(":/led_off/led_off.png"), QtGui.QIcon.Selected, QtGui.QIcon.Off)
         icon_led.addPixmap(QtGui.QPixmap(":/led_on/led_on.png"), QtGui.QIcon.Selected, QtGui.QIcon.On)
         for i in range(configuration.NR_LEDS):
-            # led widget
+            # LED widget
             self.led.append(QtWidgets.QPushButton(self.tab_fpga))
             self.led[i].setGeometry(QtCore.QRect(900, 190 + i * 2 * 15, 31, 16))
             self.led[i].setStyleSheet("")
@@ -732,13 +916,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.led[i].setIconSize(QtCore.QSize(25, 11))
             self.led[i].setFlat(True)
             self.led[i].setObjectName("led " + str(i))
-            # led label
+            # LED label
             label = QtWidgets.QLabel(self.tab_fpga)
             label.setGeometry(QtCore.QRect(940, 190 + i * 2 * 15, 31, 16))
             label.setStyleSheet("color: rgb(238, 238, 236);")
             label.setObjectName("label_led_" + str(i))
             label.setText("led " + str(i))
-            # led events (not needed for now)
+            # LED events (not needed for now)
             # self.evt_set_led_on.append(threading.Event())
             # self.evt_set_led_off.append(threading.Event())                 
         # set color
@@ -758,25 +942,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._thread.start()
         # further threads
         #################
-        scheduler_thread = threading.Thread(name="scheduler_thread", target=self.thread_scheduler,
-                                            args=("scheduler_thread",))
+        thread_clock = threading.Thread(name="clock_thread", target=self.thread_clock,
+                                            args=("clock_thread",))
+        thread_clock.start()
         reset_thread = threading.Thread(name="reset_thread", target=self.thread_reset, args=("reset_thread",))
         reset_thread.start()
         for j in range(configuration.NR_ASYNC_DI):
             i = ASYNC_DI[j]
-            thread_name = "di_thread" + str(i)
+            thread_name = "di_thread_" + str(i)
             di_thread = threading.Thread(name=thread_name, target=self.thread_di, args=(thread_name, i))
             di_thread.start()
+        # sync DI threads only used to create FIFOs
+        if USE_DI_FIFO:
+            for j in range(configuration.NR_SYNC_DI):
+                i = SYNC_DI[j]
+                thread_name = "di_thread_sync_" + str(i)
+                di_thread_sync = threading.Thread(name=thread_name, target=self.thread_di_sync, args=(thread_name, i))
+                di_thread_sync.start()
         if configuration.SWITCH_TOGGLE_AUTO == False:
             for i in range(configuration.NR_SWITCHES):
-                switch_thread = threading.Thread(name="switch_thread", target=self.thread_switch,
-                                                 args=("switch_thread", i,))
+                thread_name = "switch_thread_" + str(i)
+                switch_thread = threading.Thread(name=thread_name, target=self.thread_switch,
+                                                 args=(thread_name, i,))
                 switch_thread.start()
         if configuration.BUTTON_TOGGLE_AUTO == False:
             for i in range(configuration.NR_BUTTONS):
-                button_thread = threading.Thread(name="button_thread", target=self.thread_button,
-                                                 args=("button_thread", i,))
+                thread_name = "button_thread_" + str(i)
+                button_thread = threading.Thread(name=thread_name, target=self.thread_button,
+                                                 args=(thread_name, i,))
                 button_thread.start()
+        for i in range(configuration.NR_DOS):
+            thread_name = "fifo_r_do_thread_" + str(i)
+            do_thread = threading.Thread(name=thread_name, target=self.thread_fifo_r_do, args=(thread_name, i))
+            do_thread.start()
+        scheduler_thread = threading.Thread(name="scheduler_thread", target=self.thread_scheduler,
+                                            args=("scheduler_thread",))
         scheduler_thread.start()
         # set flag
         self.appStarted = True
@@ -785,23 +985,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.toggle_di == False:
             for j in range(configuration.NR_SYNC_DI):
                 i = SYNC_DI[j]
-                if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                    os.rename(FILE_NAME_DI_HIGH[i],
-                              FILE_NAME_DI_LOW[i])
-                else:
-                    f = open(FILE_NAME_DI_LOW[i], "w+")
-                    f.close()
                 self.DI_HIGH[i] = 0
+                # write DI_i = 0
+                if USE_DI_FIFO:
+                    if platform == "win32":
+                        win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
+                    else:
+                        self.fifo_w_di[i].write("0\r\n")
+                        self.fifo_w_di[i].flush()
+                else:
+                    if os.path.isfile(FILE_NAME_DI_HIGH[i]):
+                        renamed = False
+                        while renamed == False:
+                            try:
+                                os.rename(FILE_NAME_DI_HIGH[i], FILE_NAME_DI_LOW[i])
+                                renamed = True
+                            except:
+                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
+                    else:
+                        f = open(FILE_NAME_DI_LOW[i], "w+")
+                        f.close()
         else:
             for j in range(configuration.NR_SYNC_DI):
                 i = SYNC_DI[j]
-                if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                    os.rename(FILE_NAME_DI_LOW[i],
-                              FILE_NAME_DI_HIGH[i])
-                else:
-                    f = open(FILE_NAME_DI_HIGH[i], "w+")
-                    f.close()
                 self.DI_HIGH[i] = 1
+                # write DI_i = 1
+                if USE_DI_FIFO:
+                    if platform == "win32":
+                        win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
+                    else:
+                        self.fifo_w_di[i].write("1\r\n")
+                        self.fifo_w_di[i].flush()
+                else:
+                    if os.path.isfile(FILE_NAME_DI_LOW[i]):
+                        renamed = False
+                        while renamed == False:
+                            try:
+                                os.rename(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
+                                renamed = True
+                            except:
+                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
+                    else:
+                        f = open(FILE_NAME_DI_HIGH[i], "w+")
+                        f.close()
         # toggle signal
         self.toggle_di = not self.toggle_di
         # update GUI
@@ -811,71 +1037,196 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for j in range(configuration.NR_SYNC_DI):
             i = SYNC_DI[j]
             if self.di_count & 2 ** j:
-                if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                    os.rename(FILE_NAME_DI_LOW[i],
-                              FILE_NAME_DI_HIGH[i])
-                else:
-                    f = open(FILE_NAME_DI_HIGH[i], "w+")
-                    f.close()
                 self.DI_HIGH[i] = 1
-            else:
-                if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                    os.rename(FILE_NAME_DI_HIGH[i],
-                              FILE_NAME_DI_LOW[i])
+                # write DI_i = 1
+                if USE_DI_FIFO:
+                    if platform == "win32":
+                        win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
+                    else:
+                        self.fifo_w_di[i].write("1\r\n")
+                        self.fifo_w_di[i].flush()
                 else:
-                    f = open(FILE_NAME_DI_LOW[i], "w+")
-                    f.close()
+                    if os.path.isfile(FILE_NAME_DI_LOW[i]):
+                        renamed = False
+                        while renamed == False:
+                            try:
+                                os.rename(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
+                                renamed = True
+                            except:
+                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
+                    else:
+                        f = open(FILE_NAME_DI_HIGH[i], "w+")
+                        f.close()
+            else:
                 self.DI_HIGH[i] = 0
-        # logging.debug(DI_HIGH[0:configuration.NR_SYNC_DI])
+                # write DI_i = 0
+                if USE_DI_FIFO:
+                    if platform == "win32":
+                        win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
+                    else:
+                        self.fifo_w_di[i].write("0\r\n")
+                        self.fifo_w_di[i].flush()
+                else:
+                    if os.path.isfile(FILE_NAME_DI_HIGH[i]):
+                        renamed = False
+                        while renamed == False:
+                            try:
+                                os.rename(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
+                                renamed = True
+                            except:
+                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
+                    else:
+                        f = open(FILE_NAME_DI_LOW[i], "w+")
+                        f.close()
         self.di_count = (self.di_count + 1) % configuration.MAX_DI_COUNT
         # inform GUI
         evt_gui_di_update.set()
 
+    def thread_clock(self, name):
+        logging.info("Thread %s: starting", name)
+        # thread loop
+        while True:
+            # raise event for new clock tick
+            evt_clock.set()
+            # wait half clock period
+            evt_wake_up.wait(CLOCK_PERIOD_SEC/2)
+
+    # used only to create FIFOs for synch DIs
+    def thread_di_sync(self, name, i):
+        logging.info("Thread %s: starting", name)
+        # open FIFO for writing
+        self.fifo_w_di[i] = create_w_fifo(FILE_NAME_DI[i])
+
+    # simulate asynchronous DIs changing faster than DI period "expected" by receiver...
+    # alterantively, toggle_di may ease testing by just toggling bits,
+    # be aware also of the period used (can be set to random)
     def thread_di(self, name, i):
         logging.info("Thread %s: starting", name)
+        # open FIFO for writing
+        if USE_DI_FIFO:
+            self.fifo_w_di[i] = create_w_fifo(FILE_NAME_DI[i])
         toggle_di = False
         # thread loop
         while True:
             # device on and not paused?
             if (evt_set_power_on.is_set() == True) and (evt_pause.is_set() == False) and (
                     evt_step_on.is_set() == False):
+                # NOTE: use one of the following codes
+                ######################################
+                # if random.randint(0, 1):
                 if toggle_di == False:
-                    if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                        os.rename(FILE_NAME_DI_HIGH[i],
-                                  FILE_NAME_DI_LOW[i])
-                    else:
-                        f = open(FILE_NAME_DI_LOW[i], "w+")
-                        f.close()
+                ######################################
                     self.DI_HIGH[i] = 0
-                else:
-                    if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                        os.rename(FILE_NAME_DI_LOW[i],
-                                  FILE_NAME_DI_HIGH[i])
+                    # write DI_i = 0
+                    if USE_DI_FIFO:
+                        if platform == "win32":
+                            win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
+                        else:
+                            self.fifo_w_di[i].write("0\r\n")
+                            self.fifo_w_di[i].flush()
                     else:
-                        f = open(FILE_NAME_DI_HIGH[i], "w+")
-                        f.close()
+                        if os.path.isfile(FILE_NAME_DI_HIGH[i]):
+                            renamed = False
+                            while renamed == False:
+                                try:
+                                    os.rename(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
+                                    renamed = True
+                                except:
+                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
+                        else:
+                            f = open(FILE_NAME_DI_LOW[i], "w+")
+                            f.close()
+                else:
                     self.DI_HIGH[i] = 1
+                    # write DI_i = 1
+                    if USE_DI_FIFO:
+                        if platform == "win32":
+                            win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
+                        else:
+                            self.fifo_w_di[i].write("1\r\n")
+                            self.fifo_w_di[i].flush()
+                    else:
+                        if os.path.isfile(FILE_NAME_DI_LOW[i]):
+                            renamed = False
+                            while renamed == False:
+                                try:
+                                    os.rename(FILE_NAME_DI_LOW[i],FILE_NAME_DI_HIGH[i])
+                                    renamed = True
+                                except:
+                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
+                        else:
+                            f = open(FILE_NAME_DI_HIGH[i], "w+")
+                            f.close()
                 # toggle signal
                 toggle_di = not toggle_di
                 # inform GUI
                 evt_gui_di_update.set()
+            # NOTE: use one of the following codes
+            ######################################
+            # wait DI period
+            # NOTE: although in theory we shall have here a "repeatable and synchronized" behavior
+            #       between sync and async DIs, in reality we don't.
+            #       The call to wait(DI_PERIOD_SEC) will not be in sync with the scheduler where
+            #       sync DIs are updated.
+            #       Therefore, the complete DI values (sync + async) will not be regular/periodic in the wave output.
+            # evt_wake_up.wait(DI_PERIOD_SEC)
             # wait random time within defined limits
             evt_wake_up.wait(random.uniform(CLOCK_PERIOD_SEC, DI_PERIOD_SEC))
+            ######################################
+
+    def thread_fifo_r_do(self, name, i):
+        logging.info("Thread %s: starting", name)
+        # open FIFO for reading
+        self.fifo_r_do[i] = create_r_fifo(FILE_NAME_DO[i])
+        # thread loop
+        while True:
+            # read DO_x FIFO
+            ################
+            if platform == "win32":
+                try:
+                    line = win32file.ReadFile(self.fifo_r_do[i], 64*1024)
+                    # NOTE: keep variable line compatible with FIFO read in linux
+                    # temp_line_int = int.from_bytes(line[1]); # str(line[1], 'utf-8') # TODO: why nok?
+                    temp_line_str = str(line[1], 'utf-8')
+                    try:
+                        temp_line_int = int(temp_line_str)
+                    except ValueError:
+                        temp_line_int = 0
+                except:
+                    logging.error("could not read from pipe of DO_" + str(i))
+                    win32file.CloseHandle(self.fifo_r_do[i])
+            else:
+                line = self.fifo_r_do[i].readline()
+            # process DO_x info from FIFO
+            #############################
+            self.lock_r_do[i].acquire()
+            self.FIFO_R_DO_HIGH[i] = temp_line_int
+            self.lock_r_do[i].release()
 
     def do_switch(self):
         if self.toggle_switch == False:
             for i in range(configuration.NR_SWITCHES):
                 if os.path.isfile(FILE_NAME_SW_HIGH[i]):
-                    os.rename(FILE_NAME_SW_HIGH[i],
-                              FILE_NAME_SW_LOW[i])
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_SW_HIGH[i],FILE_NAME_SW_LOW[i])
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[i])
                 else:
                     f = open(FILE_NAME_SW_LOW[i], "w+")
                     f.close()
         else:
             for i in range(configuration.NR_SWITCHES):
                 if os.path.isfile(FILE_NAME_SW_LOW[i]):
-                    os.rename(FILE_NAME_SW_LOW[i],
-                              FILE_NAME_SW_HIGH[i])
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_SW_LOW[i],FILE_NAME_SW_HIGH[i])
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[i])
                 else:
                     f = open(FILE_NAME_SW_HIGH[i], "w+")
                     f.close()
@@ -886,22 +1237,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.toggle_button == False:
             for i in range(configuration.NR_BUTTONS):
                 if os.path.isfile(FILE_NAME_BTN_HIGH[i]):
-                    os.rename(FILE_NAME_BTN_HIGH[i],
-                              FILE_NAME_BTN_LOW[i])
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_BTN_HIGH[i],FILE_NAME_BTN_LOW[i])
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_HIGH[i])
                 else:
                     f = open(FILE_NAME_BTN_LOW[i], "w+")
                     f.close()
-                # logging.debug("Button "+str(i)+" = LOW")
             logging.debug("Buttons set to LOW (auto)")
         else:
             for i in range(configuration.NR_BUTTONS):
                 if os.path.isfile(FILE_NAME_BTN_LOW[i]):
-                    os.rename(FILE_NAME_BTN_LOW[i],
-                              FILE_NAME_BTN_HIGH[i])
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_BTN_LOW[i],FILE_NAME_BTN_HIGH[i])
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_LOW[i])
                 else:
                     f = open(FILE_NAME_BTN_HIGH[i], "w+")
                     f.close()
-                # logging.debug("Button "+str(i)+" = HIGH")
             logging.debug("Buttons set to HIGH (auto)")
         self.toggle_button = not self.toggle_button
 
@@ -912,22 +1271,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if configuration.SWITCH_TOGGLE_AUTO == False:
                 if self.evt_set_switch_on[idx].is_set() == False:
                     if os.path.isfile(FILE_NAME_SW_HIGH[idx]):
-                        os.rename(FILE_NAME_SW_HIGH[idx],
-                                  FILE_NAME_SW_LOW[idx])
+                        renamed = False
+                        while renamed == False:
+                            try:
+                                os.rename(FILE_NAME_SW_HIGH[idx],FILE_NAME_SW_LOW[idx])
+                                renamed = True
+                            except:
+                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[idx])
                     else:
                         f = open(FILE_NAME_SW_LOW[idx], "w+")
                         f.close()
                     logging.info("Switch (" + str(idx) + ") = OFF")
-                    self.evt_set_switch_on[idx].wait(999999)
+                    self.evt_set_switch_on[idx].wait()
                 else:
                     if os.path.isfile(FILE_NAME_SW_LOW[idx]):
-                        os.rename(FILE_NAME_SW_LOW[idx],
-                                  FILE_NAME_SW_HIGH[idx])
+                        renamed = False
+                        while renamed == False:
+                            try:
+                                os.rename(FILE_NAME_SW_LOW[idx],FILE_NAME_SW_HIGH[idx])
+                                renamed = True
+                            except:
+                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_LOW[idx])
                     else:
                         f = open(FILE_NAME_SW_HIGH[idx], "w+")
                         f.close()
                     logging.info("Switch (" + str(idx) + ") = ON")
-                    self.evt_set_switch_off[idx].wait(999999)
+                    self.evt_set_switch_off[idx].wait()
             else:
                 evt_wake_up.wait(CLOCK_PERIOD_SEC / 2)
 
@@ -937,22 +1306,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         while True:
             if self.evt_set_button_on[idx].is_set() == False:
                 if os.path.isfile(FILE_NAME_BTN_HIGH[idx]):
-                    os.rename(FILE_NAME_BTN_HIGH[idx],
-                              FILE_NAME_BTN_LOW[idx])
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_BTN_HIGH[idx],FILE_NAME_BTN_LOW[idx])
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_HIGH[idx])
                 else:
                     f = open(FILE_NAME_BTN_LOW[idx], "w+")
                     f.close()
                 logging.info("Button (" + str(idx) + ") = LOW")
-                self.evt_set_button_on[idx].wait(999999)
+                self.evt_set_button_on[idx].wait()
             else:
                 if os.path.isfile(FILE_NAME_BTN_LOW[idx]):
-                    os.rename(FILE_NAME_BTN_LOW[idx],
-                              FILE_NAME_BTN_HIGH[idx])
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_BTN_LOW[idx],FILE_NAME_BTN_HIGH[idx])
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_LOW[idx])
                 else:
                     f = open(FILE_NAME_BTN_HIGH[idx], "w+")
                     f.close()
                 logging.info("Button (" + str(idx) + ") = HIGH")
-                self.evt_set_button_off[idx].wait(999999)
+                self.evt_set_button_off[idx].wait()
 
     def thread_reset(self, name):
         logging.info("Thread %s: starting", name)
@@ -960,31 +1339,39 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         while True:
             if evt_set_reset_high.is_set() == False:
                 if os.path.isfile(FILE_NAME_RESET_HIGH):
-                    os.rename(FILE_NAME_RESET_HIGH,
-                              FILE_NAME_RESET_LOW)
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_RESET_HIGH,FILE_NAME_RESET_LOW)
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_RESET_HIGH)
                 else:
                     f = open(FILE_NAME_RESET_LOW, "w+")
                     f.close()
                 logging.info("Reset set to LOW")
-                evt_set_reset_high.wait(999999)
+                evt_set_reset_high.wait()
             else:
                 if os.path.isfile(FILE_NAME_RESET_LOW):
-                    os.rename(FILE_NAME_RESET_LOW,
-                              FILE_NAME_RESET_HIGH)
+                    renamed = False
+                    while renamed == False:
+                        try:
+                            os.rename(FILE_NAME_RESET_LOW,FILE_NAME_RESET_HIGH)
+                            renamed = True
+                        except:
+                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_RESET_LOW)
                 else:
                     f = open(FILE_NAME_RESET_HIGH, "w+")
                     f.close()
                 logging.info("Reset set to HIGH")
-                evt_set_reset_low.wait(999999)
+                evt_set_reset_low.wait()
 
     def do_led(self):
         for i in range(configuration.NR_LEDS):
             if self.LED_ON[i] == 0:
                 if os.path.isfile(FILE_NAME_LED_ON[i]):
                     os.remove(FILE_NAME_LED_ON[i])
-                    # TODO: check if we can remove this and instead cleanup e.g. just on reset.
-                    #       That is, at places where we may create inconsistencies.
-                    # clean up just in case (we assume signal cannot be set faster than we poll)                    
+                    # clean up just in case (we assume signal cannot be set faster than we poll)
                     if os.path.isfile(FILE_NAME_LED_OFF[i]):
                         os.remove(FILE_NAME_LED_OFF[i])
                     logging.debug("LED %s is ON", str(i))  # logging.info("LED %s is ON", str(i))
@@ -992,7 +1379,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 if os.path.isfile(FILE_NAME_LED_OFF[i]):
                     os.remove(FILE_NAME_LED_OFF[i])
-                    # clean up just in case (we assume signal cannot be set faster than we poll)                    
+                    # clean up just in case (we assume signal cannot be set faster than we poll)
                     if os.path.isfile(FILE_NAME_LED_ON[i]):
                         os.remove(FILE_NAME_LED_ON[i])
                     logging.debug("LED %s is OFF", str(i))  # logging.info("LED %s is OFF", str(i))
@@ -1003,21 +1390,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def do_do(self):
         for i in range(configuration.NR_DOS):
             if self.DO_HIGH[i] == 0:
-                if os.path.isfile(FILE_NAME_DO_HIGH[i]):
-                    os.remove(FILE_NAME_DO_HIGH[i])
-                    # clean up just in case (we assume signal cannot be set faster than we poll)
-                    if os.path.isfile(FILE_NAME_DO_LOW[i]):
-                        os.remove(FILE_NAME_DO_LOW[i])
+                # first check if FIFO_R_DO_HIGH[i] is currently being set
+                # assumption: if locked, lock will be soon released, no need for max. retry count
+                while self.lock_r_do[i].locked()  == True:
+                    logging.warning("lock for DO[" + str(i) + "] is locked!")
+                    # assumption: we don't need to introduce a pause here e.g. with sleep or wait
+                self.lock_r_do[i].acquire()
+                if self.FIFO_R_DO_HIGH[i] == 1:
                     logging.debug("DO %s is HIGH", str(i))
                     self.DO_HIGH[i] = 1
+                self.lock_r_do[i].release()
             else:
-                if os.path.isfile(FILE_NAME_DO_LOW[i]):
-                    os.remove(FILE_NAME_DO_LOW[i])
-                    # clean up just in case (we assume signal cannot be set faster than we poll)
-                    if os.path.isfile(FILE_NAME_DO_HIGH[i]):
-                        os.remove(FILE_NAME_DO_HIGH[i])
+                # first check if FIFO_R_DO_HIGH[i] is currently being set
+                # assumption: if locked, lock will be soon released, no need for max. retry count
+                while self.lock_r_do[i].locked() == True:
+                    logging.warning("lock for DO[" + str(i) + "] is locked!")
+                    # assumption: we don't need to introduce a pause here e.g. with sleep or wait
+                self.lock_r_do[i].acquire()
+                if self.FIFO_R_DO_HIGH[i] == 0:
                     logging.debug("DO %s is LOW", str(i))
                     self.DO_HIGH[i] = 0
+                self.lock_r_do[i].release()
         # inform GUI
         evt_gui_do_update.set()
 
@@ -1061,6 +1454,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             row += "\n"
             self.csv_file.write(row)
 
+    # TODO: need to update threads as well..
     def updateMemberVariables(self):
         self.DI_HIGH = []
         for i in range(configuration.NR_DIS):
@@ -1080,15 +1474,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         logging.basicConfig(format=format, datefmt='%H:%M:%S:%m', level=configuration.LOGGING_LEVEL)
         # simulator options        
         self.leClkPeriods.setText(str(configuration.RUN_FOR_CLOCK_PERIODS))
-        self.leClkPeriodMs.setText(str(int(CLOCK_PERIOD_SEC * 1000)))
+        self.leClkPeriodMs.setText(str(float(CLOCK_PERIOD_SEC * 1000.0)))
         self.leGuiRefreshHz.setText(str(configuration.GUI_UPDATE_PERIOD_IN_HZ))
         self.pbKeepPbPressed.setChecked(configuration.KEEP_PB_PRESSED)
 
-    # thread
     def thread_buttonSound(self):
         playsound(configuration.PATH_PREFIX + 'sounds/buttonClick.mp3')
 
-    # slot
     def on_button_clicked(self, idx):
         if configuration.KEEP_PB_PRESSED == True:
             if configuration.SOUND_EFFECTS:
@@ -1104,7 +1496,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.evt_set_button_on[idx].set()
                 self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
 
-    # slot
     def on_button_pressed(self, idx):
         if configuration.KEEP_PB_PRESSED == False:
             if configuration.SOUND_EFFECTS:
@@ -1115,7 +1506,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.evt_set_button_on[idx].set()
             self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
 
-    # slot
     def on_button_released(self, idx):
         if configuration.KEEP_PB_PRESSED == False:
             if configuration.SOUND_EFFECTS:
@@ -1140,7 +1530,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.evt_set_switch_on[idx].set()
             self.switch[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/sw_right.png'))
 
-    # thread
     def thread_powerSound(self):
         playsound(configuration.PATH_PREFIX + 'sounds/power_on_off.mp3')
 
@@ -1160,7 +1549,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # set RESET to high for T/2 in order to initialize VHDL signals
             evt_set_reset_low.clear()
             evt_set_reset_high.set()
-            time.sleep((CLOCK_PERIOD_SEC / 2)*2)
+            time.sleep(configuration.RESET_FOR_SECONDS)
             evt_set_reset_high.clear()
             evt_set_reset_low.set()
             # time.sleep(CLOCK_PERIOD_SEC/2) # need this?            
@@ -1223,7 +1612,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
             powerSoundThread.start()
 
-    # thread
     def thread_runForTime(self):
         logging.info("Run for " + str(configuration.RUN_FOR_CLOCK_PERIODS) + " clock cycles.")
         # wait for specified time (dummy event evt_wake_up never comes)
@@ -1293,29 +1681,50 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     @pyqtSlot()
     def on_leClkPeriodMs_editingFinished(self):
         try:
-            tempValue = int(self.leClkPeriodMs.text())
-            if tempValue <= 0:
+            tempValue = float(self.leClkPeriodMs.text())
+            if tempValue <= 0.0:
                 # NOTE: set text to current value
-                self.leClkPeriodMs.setText(str(int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])))
+                self.leClkPeriodMs.setText(str(float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])))
                 logging.error("clock period shall be greater than zero")
                 tkinter.messagebox.showerror(title="ERROR", message="clock period shall be greater than zero")
                 root.update()
             elif tempValue < configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS:
                 # NOTE: set text to current value
-                self.leClkPeriodMs.setText(str(int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])))
+                self.leClkPeriodMs.setText(str(float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])))
                 logging.warning("small clock periods may produce an inaccurate simulation!")
                 tkinter.messagebox.showerror(title="ERROR",
                                              message="small clock periods may produce an inaccurate simulation!")
                 root.update()
             else:
-                configuration.CLOCK_PERIOD_EXTERNAL = str(tempValue * 1000000) + " ns"
+                configuration.CLOCK_PERIOD_EXTERNAL = str(tempValue * 1000000.0) + " ns"
                 # update GUI definitions (e.g. values to change polling rate of threads)
                 updateGuiDefs()
         except:
             # NOTE: set text to current value
-            self.leClkPeriodMs.setText(str(int(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])))
+            self.leClkPeriodMs.setText(str(float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])))
             logging.error("clock periods shall be an integer value")
             tkinter.messagebox.showerror(title="ERROR", message="clock periods shall be an integer value")
+            root.update()
+
+    @pyqtSlot()
+    def on_leResetSecs_editingFinished(self):
+        try:
+            tempValue = float(self.leResetSecs.text())
+            if tempValue <= 0.0:
+                # NOTE: set text to current value
+                self.leResetSecs.setText(str('%.24f' % configuration.RESET_FOR_SECONDS).rstrip('0').rstrip('.'))
+                logging.error("reset time shall be greater than zero")
+                tkinter.messagebox.showerror(title="ERROR", message="reset time shall be greater than zero")
+                root.update()
+            else:
+                configuration.RESET_FOR_SECONDS = str(tempValue)
+                # update GUI definitions (e.g. values to change polling rate of threads)
+                updateGuiDefs()
+        except:
+            # NOTE: set text to current value
+            self.leResetSecs.setText(str('%.24f' % configuration.RESET_FOR_SECONDS).rstrip('0').rstrip('.'))
+            logging.error("reset time shall be a float value")
+            tkinter.messagebox.showerror(title="ERROR", message="reset time shall be a float value")
             root.update()
 
     @pyqtSlot()
@@ -1387,12 +1796,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         root.update()
 
     def changeShowPlotThread(self):
+        '''
         # TODO:  this call just blocks forever. Investigate, and if possible call plt.close in Slot() instead.
         #             a "dead/blocked" thread remains in memory every time we switch off here.
         plt.close()
-        # TODO: by the way, why can't we just do this instead?
+        # TODO: why can't we just do this instead?
         # plt.gcf().set_visible(False)
         # plt.draw() # needed to make previous call effective?
+        '''
 
     # called from the "main loop"
     def plotThread(self):
@@ -1439,7 +1850,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                              Qt.MatchFlag.MatchExactly)  # .findText(configuration.LOGGING_LEVEL, Qt.MatchFixedString)
         if index >= 0:
             self.cbLoggingLevel.setCurrentIndex(index)
-            # if the severity level is INFO, the logger will handle only INFO, WARNING, ERROR, and CRITICAL messages and will ignore DEBUG messages
+            # NOTE: if the severity level is INFO, the logger will handle only INFO, WARNING, ERROR, and CRITICAL messages and will ignore DEBUG messages
             # logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
             logging_level = logging.INFO
             if configuration.LOGGING_LEVEL == "logging.DEBUG":
@@ -1499,6 +1910,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             root.update()
 
     @pyqtSlot()
+    def on_leFifoPath_editingFinished(self):
+        configuration.FIFO_PATH = self.leFifoPath.text()
+        logging.warning("FIFO_PATH updated. New value will take effect after saving configuration and restarting application!")
+        tkinter.messagebox.showwarning(title="WARNING",message="FIFO_PATH updated. New value will take effect after saving configuration and restarting application!")
+        root.update()
+
+    @pyqtSlot()
     def on_cbSoundOn_clicked(self):
         if configuration.SOUND_EFFECTS != self.cbSoundOn.isChecked():
             configuration.SOUND_EFFECTS = self.cbSoundOn.isChecked()
@@ -1552,10 +1970,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     @pyqtSlot()
     def on_leMinClockPeriodMs_editingFinished(self):
         try:
-            tempValue = int(self.leMinClockPeriodMs.text())
-            if tempValue <= 0:
+            tempValue = float(self.leMinClockPeriodMs.text())
+            if tempValue <= 0.0:
                 # NOTE: set text to current value
-                self.leMinClockPeriodMs.setText(str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS))
+                self.leMinClockPeriodMs.setText(str('%.24f' % configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS).rstrip('0').rstrip('.'))
                 logging.error("Min. clock period shall be greater than zero")
                 tkinter.messagebox.showerror(title="ERROR", message="Min. clock period shall be greater than zero")
                 root.update()
@@ -1563,7 +1981,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS = tempValue
         except:
             # NOTE: set text to current value
-            self.leMinClockPeriodMs.setText(str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS))
+            self.leMinClockPeriodMs.setText(str('%.24f' % configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS).rstrip('0').rstrip('.'))
             logging.error("Min. clock period shall be an integer value")
             tkinter.messagebox.showerror(title="ERROR", message="Min. clock period shall be an integer value")
             root.update()
