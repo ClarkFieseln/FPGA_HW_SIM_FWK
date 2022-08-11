@@ -5,7 +5,7 @@ use STD.textio.all;
 use ieee.std_logic_textio.all; 
 
 
-package hw_sim_fwk_common is
+package hw_sim_fwk_common is  
   -- functions
   -- #########
   function file_exists(filename : in string) return boolean;
@@ -34,13 +34,13 @@ package body hw_sim_fwk_common is
   function file_create(filename : in string) return boolean is
     variable ret_val : boolean := false;
     variable open_status : FILE_OPEN_STATUS;
-    file LEDS_FILE : text;
+    file FILE_T : text;
   begin
-    file_open(open_status, LEDS_FILE, filename, write_mode);
+    file_open(open_status, FILE_T, filename, write_mode);
     if open_status /= open_ok then
-      report "Error: could not create file for LED!";
+      report "Error: could not create file!";
     else
-      file_close(LEDS_FILE);
+      file_close(FILE_T);
       ret_val := true;
     end if;	
     return ret_val;		
