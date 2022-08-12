@@ -1188,15 +1188,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     # NOTE: keep variable line compatible with FIFO read in linux
                     # temp_line_int = int.from_bytes(line[1]); # str(line[1], 'utf-8') # TODO: why nok?
                     temp_line_str = str(line[1], 'utf-8')
-                    try:
-                        temp_line_int = int(temp_line_str)
-                    except ValueError:
-                        temp_line_int = 0
                 except:
                     logging.error("could not read from pipe of DO_" + str(i))
                     win32file.CloseHandle(self.fifo_r_do[i])
             else:
-                line = self.fifo_r_do[i].readline()
+                temp_line_str = self.fifo_r_do[i].read() # .readline()
+            try:
+                temp_line_int = int(temp_line_str)
+            except ValueError:
+                temp_line_int = 0
             # process DO_x info from FIFO
             #############################
             self.lock_r_do[i].acquire()
