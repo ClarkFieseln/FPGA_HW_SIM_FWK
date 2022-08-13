@@ -25,12 +25,31 @@ import functools
 from threading import Lock
 if platform == "win32":
     import win32pipe, win32file, pywintypes
-
-
 # TEST
 #############
 import timeit
 #############
+
+
+# NOTE: minimize application windows when not needed in order to increase performance.
+#       Intensive work on wave output on the simulator may also affect performance.
+######################################################################################
+
+
+# TODO: check this..
+# ####### did not change resolution ? ##########
+# from https://discuss.python.org/t/higher-resolution-timers-on-windows/16153
+import ctypes
+ntdll = ctypes.WinDLL('NTDLL.DLL')
+NSEC_PER_SEC = 1000000000
+def set_resolution_ns(resolution):
+    # NtSetTimerResolution uses 100ns units
+    resolution = ctypes.c_ulong(int(resolution // 100))
+    current = ctypes.c_ulong()
+    r = ntdll.NtSetTimerResolution(resolution, 1, ctypes.byref(current))
+    # NtSetTimerResolution uses 100ns units
+    return current.value * 100
+set_resolution_ns(1e-6 * NSEC_PER_SEC) / NSEC_PER_SEC
 
 
 # TODOs:
@@ -340,9 +359,11 @@ evt_do_step = threading.Event()
 #       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
 evt_wake_up = threading.Event()
 evt_clock = threading.Event()
+evt_close_app = threading.Event()
 # these events improve performance by indicating exactly when the GUI shall update which widgets.
-evt_gui_di_update = threading.Event()
-evt_gui_do_update = threading.Event()
+# NOTE: using individual events for each of the DIs and DOs to "fine tune" GUI update decreases performance!
+evt_gui_di_update = threading.Event() # [] # threading.Event()
+evt_gui_do_update = threading.Event() # [] # threading.Event()
 evt_gui_led_update = threading.Event()
 evt_gui_remain_run_time_update = threading.Event()
 
@@ -401,7 +422,7 @@ def create_r_fifo(FILE_NAME):
     fifo_r = None
     if platform == "win32":
         try:
-            print("client, create read named_pipe = " + FILE_NAME)
+            logging.info("client, create read named_pipe = " + FILE_NAME)
             fifo_r = win32pipe.CreateNamedPipe(
                 FILE_NAME,
                 win32pipe.PIPE_ACCESS_INBOUND,  # win32pipe.PIPE_ACCESS_DUPLEX,
@@ -424,9 +445,9 @@ def create_r_fifo(FILE_NAME):
                 exit(cf.f_lineno)
         except pywintypes.error as e:
             if e.args[0] == 109:
-                print("broken pipe, bye bye")
+                logging.error("broken pipe, bye bye")
             else:
-                print("Error" + str(e))
+                logging.error("Error" + str(e))
             exit(cf.f_lineno)
     else:
         if os.path.exists(FILE_NAME == False):
@@ -515,6 +536,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #############
     freq = 0
     nr_cycles = 0
+    log_buff = ""
+    info_buff = ""
     #############
 
     ######################################################################################
@@ -528,21 +551,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         updated = pyqtSignal(str)
         def run(self):
             logging.info("MyGuiUpdateThread:run()")
-            while True:
+            while evt_close_app.is_set() == False:
                 evt_wake_up.wait(1 / configuration.GUI_UPDATE_PERIOD_IN_HZ)
                 self.updated.emit("Hi")
 
     # thread to update GUI
     ######################
     def updateGui(self):
-
-
         # TEST
-        ##################################################
-        # print(str(int(self.freq))+","+str(self.nr_cycles))
-        ##################################################
-
-
+        ######
+        self.log_buff += str(int(self.freq)) + "\r\n"
+        ######
         # update status on GUI
         ######################
         if (self.lblStatus is not None):
@@ -588,7 +607,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.pbActive.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_green_off.png'))
 
     # thread for scheduling synchronous signals
-    ###########################################
+    # NOTE: tests showed that DIs, DOs, LEDs need 1ms (sometimes 2ms).
+    #       Intensive work on VIVADO simulator, e.g. on wave-output may increase this time up to 5ms.
+    #       Therefore, a maximum data rate between App and VHDL of approx. 200 Hz can be reached.
+    #       A higher rate of about 500Hz will work fine most of the time.
+    #       Any configured rate will not affect the simulation results but just work slower than expected.
+    # NOTE: in order to distribute the processing load we "output" signals (DIs, switches, buttons) in one flank and
+    #       "input" signals (DOs, LEDs) in the other flank. Note the inverted direction with regards VHDL-simulator.
+    ################################################################################################################
     def thread_scheduler(self, name):
         logging.info("Thread %s starting", name)
         # create FIFO for clock
@@ -597,7 +623,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # nr. of counted clock periods
         clock_periods = 0
         # main loop (toggle signal and sleep)
-        while True:
+        while evt_close_app.is_set() == False:
             # time measurement
             current_time = time.time()
             # device on?
@@ -669,12 +695,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     evt_clock.wait()
                     evt_clock.clear()
             else:
-                # TEST
                 ###################################
                 self.nr_cycles = self.nr_cycles + 1
                 tdiff = time.time() - current_time
                 if tdiff != 0:
                     self.freq = 1/(tdiff)
+                    # TEST
+                    #####################################
+                    # NOTE: never use print()!
+                    #       Instead, log by append-writing on a variable which is printed at the end.
+                    #       Alternatively you can use logging.info() or write to a file.
+                    self.info_buff += str(tdiff) + "\r\n"
+                    # logging.info(tdiff)
+                    #####################################
+                    if tdiff > CLOCK_PERIOD_SEC:
+                        logging.warning("processing time in scheduler = "+str(tdiff)+" sec exceeds CLOCK_PERIOD_SEC = "+str(CLOCK_PERIOD_SEC))
+                        # Note: if you get here you may need to select a higher value for CLOCK_PERIOD_SEC.
+                        #       The events generated by thread_clock will not be processed in time by thread_scheduler.
+                        #       If there are no external time dependencies, then the simulation may continue to run withtout problems, but at a lower pace as expected.
                 ###################################
                 evt_clock.wait()
                 evt_clock.clear()
@@ -998,7 +1036,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         renamed = False
                         while renamed == False:
                             try:
-                                os.rename(FILE_NAME_DI_HIGH[i], FILE_NAME_DI_LOW[i])
+                                os.replace(FILE_NAME_DI_HIGH[i], FILE_NAME_DI_LOW[i])
                                 renamed = True
                             except:
                                 logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
@@ -1021,7 +1059,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         renamed = False
                         while renamed == False:
                             try:
-                                os.rename(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
+                                os.replace(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
                                 renamed = True
                             except:
                                 logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
@@ -1033,59 +1071,68 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # update GUI
         evt_gui_di_update.set()
 
+    # TODO: investigate if it is possible to set DIs faster.
+    #       Why does it take 1ms to rename/remove a file in Win11 ? Or is this just the poor resolution of time.time() ?
+    # NOTE: 1ms is the default time it takes to set a DI by renaming the shared file or creating it for w+
+    #       But when e.g. switches are used then it may sometimes take 2ms,
+    #       when working intensively on VIVADO's wave-output, tests showed even higher values: 3ms, 4ms, 5ms,..
     def do_di_count(self):
         for j in range(configuration.NR_SYNC_DI):
             i = SYNC_DI[j]
             if self.di_count & 2 ** j:
-                self.DI_HIGH[i] = 1
-                # write DI_i = 1
-                if USE_DI_FIFO:
-                    if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
+                # need to set bit?
+                if self.DI_HIGH[i] != 1:
+                    self.DI_HIGH[i] = 1
+                    # write DI_i = 1
+                    if USE_DI_FIFO:
+                        if platform == "win32":
+                            win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
+                        else:
+                            self.fifo_w_di[i].write("1\r\n")
+                            self.fifo_w_di[i].flush()
                     else:
-                        self.fifo_w_di[i].write("1\r\n")
-                        self.fifo_w_di[i].flush()
-                else:
-                    if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.rename(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
-                    else:
-                        f = open(FILE_NAME_DI_HIGH[i], "w+")
-                        f.close()
+                        if os.path.isfile(FILE_NAME_DI_LOW[i]):
+                            renamed = False
+                            while renamed == False:
+                                try:
+                                    os.replace(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
+                                    renamed = True
+                                except:
+                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
+                        else:
+                            f = open(FILE_NAME_DI_HIGH[i], "w+")
+                            f.close()
             else:
-                self.DI_HIGH[i] = 0
-                # write DI_i = 0
-                if USE_DI_FIFO:
-                    if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
+                # need to clear bit?
+                if self.DI_HIGH[i] != 0:
+                    self.DI_HIGH[i] = 0
+                    # write DI_i = 0
+                    if USE_DI_FIFO:
+                        if platform == "win32":
+                            win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
+                        else:
+                            self.fifo_w_di[i].write("0\r\n")
+                            self.fifo_w_di[i].flush()
                     else:
-                        self.fifo_w_di[i].write("0\r\n")
-                        self.fifo_w_di[i].flush()
-                else:
-                    if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.rename(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
-                    else:
-                        f = open(FILE_NAME_DI_LOW[i], "w+")
-                        f.close()
+                        if os.path.isfile(FILE_NAME_DI_HIGH[i]):
+                            renamed = False
+                            while renamed == False:
+                                try:
+                                    os.replace(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
+                                    renamed = True
+                                except:
+                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
+                        else:
+                            f = open(FILE_NAME_DI_LOW[i], "w+")
+                            f.close()
         self.di_count = (self.di_count + 1) % configuration.MAX_DI_COUNT
-        # inform GUI
+        # update GUI
         evt_gui_di_update.set()
 
     def thread_clock(self, name):
         logging.info("Thread %s: starting", name)
         # thread loop
-        while True:
+        while evt_close_app.is_set() == False:
             # raise event for new clock tick
             evt_clock.set()
             # wait half clock period
@@ -1107,7 +1154,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.fifo_w_di[i] = create_w_fifo(FILE_NAME_DI[i])
         toggle_di = False
         # thread loop
-        while True:
+        while evt_close_app.is_set() == False:
             # device on and not paused?
             if (evt_set_power_on.is_set() == True) and (evt_pause.is_set() == False) and (
                     evt_step_on.is_set() == False):
@@ -1129,7 +1176,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                             renamed = False
                             while renamed == False:
                                 try:
-                                    os.rename(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
+                                    os.replace(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
                                     renamed = True
                                 except:
                                     logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
@@ -1150,7 +1197,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                             renamed = False
                             while renamed == False:
                                 try:
-                                    os.rename(FILE_NAME_DI_LOW[i],FILE_NAME_DI_HIGH[i])
+                                    os.replace(FILE_NAME_DI_LOW[i],FILE_NAME_DI_HIGH[i])
                                     renamed = True
                                 except:
                                     logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
@@ -1169,9 +1216,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             #       The call to wait(DI_PERIOD_SEC) will not be in sync with the scheduler where
             #       sync DIs are updated.
             #       Therefore, the complete DI values (sync + async) will not be regular/periodic in the wave output.
-            # evt_wake_up.wait(DI_PERIOD_SEC)
+            evt_wake_up.wait(DI_PERIOD_SEC)
             # wait random time within defined limits
-            evt_wake_up.wait(random.uniform(CLOCK_PERIOD_SEC, DI_PERIOD_SEC))
+            # evt_wake_up.wait(random.uniform(CLOCK_PERIOD_SEC, DI_PERIOD_SEC))
             ######################################
 
     def thread_fifo_r_do(self, name, i):
@@ -1179,7 +1226,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # open FIFO for reading
         self.fifo_r_do[i] = create_r_fifo(FILE_NAME_DO[i])
         # thread loop
-        while True:
+        while evt_close_app.is_set() == False:
             # read DO_x FIFO
             ################
             if platform == "win32":
@@ -1210,7 +1257,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_SW_HIGH[i],FILE_NAME_SW_LOW[i])
+                            os.replace(FILE_NAME_SW_HIGH[i],FILE_NAME_SW_LOW[i])
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[i])
@@ -1223,7 +1270,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_SW_LOW[i],FILE_NAME_SW_HIGH[i])
+                            os.replace(FILE_NAME_SW_LOW[i],FILE_NAME_SW_HIGH[i])
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[i])
@@ -1240,7 +1287,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_BTN_HIGH[i],FILE_NAME_BTN_LOW[i])
+                            os.replace(FILE_NAME_BTN_HIGH[i],FILE_NAME_BTN_LOW[i])
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_HIGH[i])
@@ -1254,7 +1301,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_BTN_LOW[i],FILE_NAME_BTN_HIGH[i])
+                            os.replace(FILE_NAME_BTN_LOW[i],FILE_NAME_BTN_HIGH[i])
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_LOW[i])
@@ -1267,14 +1314,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def thread_switch(self, name, idx):
         logging.info("Thread %s(%s): starting", name, str(idx))
         # thread loop
-        while True:
+        while evt_close_app.is_set() == False:
             if configuration.SWITCH_TOGGLE_AUTO == False:
                 if self.evt_set_switch_on[idx].is_set() == False:
                     if os.path.isfile(FILE_NAME_SW_HIGH[idx]):
                         renamed = False
                         while renamed == False:
                             try:
-                                os.rename(FILE_NAME_SW_HIGH[idx],FILE_NAME_SW_LOW[idx])
+                                os.replace(FILE_NAME_SW_HIGH[idx],FILE_NAME_SW_LOW[idx])
                                 renamed = True
                             except:
                                 logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[idx])
@@ -1288,7 +1335,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         renamed = False
                         while renamed == False:
                             try:
-                                os.rename(FILE_NAME_SW_LOW[idx],FILE_NAME_SW_HIGH[idx])
+                                os.replace(FILE_NAME_SW_LOW[idx],FILE_NAME_SW_HIGH[idx])
                                 renamed = True
                             except:
                                 logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_LOW[idx])
@@ -1303,13 +1350,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def thread_button(self, name, idx):
         logging.info("Thread %s(%s): starting", name, str(idx))
         # thread loop
-        while True:
+        while evt_close_app.is_set() == False:
             if self.evt_set_button_on[idx].is_set() == False:
                 if os.path.isfile(FILE_NAME_BTN_HIGH[idx]):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_BTN_HIGH[idx],FILE_NAME_BTN_LOW[idx])
+                            os.replace(FILE_NAME_BTN_HIGH[idx],FILE_NAME_BTN_LOW[idx])
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_HIGH[idx])
@@ -1323,7 +1370,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_BTN_LOW[idx],FILE_NAME_BTN_HIGH[idx])
+                            os.replace(FILE_NAME_BTN_LOW[idx],FILE_NAME_BTN_HIGH[idx])
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_LOW[idx])
@@ -1336,13 +1383,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def thread_reset(self, name):
         logging.info("Thread %s: starting", name)
         # thread loop
-        while True:
+        while evt_close_app.is_set() == False:
             if evt_set_reset_high.is_set() == False:
                 if os.path.isfile(FILE_NAME_RESET_HIGH):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_RESET_HIGH,FILE_NAME_RESET_LOW)
+                            os.replace(FILE_NAME_RESET_HIGH,FILE_NAME_RESET_LOW)
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_RESET_HIGH)
@@ -1356,7 +1403,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     renamed = False
                     while renamed == False:
                         try:
-                            os.rename(FILE_NAME_RESET_LOW,FILE_NAME_RESET_HIGH)
+                            os.replace(FILE_NAME_RESET_LOW,FILE_NAME_RESET_HIGH)
                             renamed = True
                         except:
                             logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_RESET_LOW)
@@ -1370,18 +1417,42 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for i in range(configuration.NR_LEDS):
             if self.LED_ON[i] == 0:
                 if os.path.isfile(FILE_NAME_LED_ON[i]):
-                    os.remove(FILE_NAME_LED_ON[i])
+                    removed = False
+                    while removed == False:
+                        try:
+                            os.remove(FILE_NAME_LED_ON[i])
+                            removed = True
+                        except:
+                            logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_ON[i])
                     # clean up just in case (we assume signal cannot be set faster than we poll)
                     if os.path.isfile(FILE_NAME_LED_OFF[i]):
-                        os.remove(FILE_NAME_LED_OFF[i])
+                        removed = False
+                        while removed == False:
+                            try:
+                                os.remove(FILE_NAME_LED_OFF[i])
+                                removed = True
+                            except:
+                                logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_OFF[i])
                     logging.debug("LED %s is ON", str(i))  # logging.info("LED %s is ON", str(i))
                     self.LED_ON[i] = 1
             else:
                 if os.path.isfile(FILE_NAME_LED_OFF[i]):
-                    os.remove(FILE_NAME_LED_OFF[i])
+                    removed = False
+                    while removed == False:
+                        try:
+                            os.remove(FILE_NAME_LED_OFF[i])
+                            removed = True
+                        except:
+                            logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_OFF[i])
                     # clean up just in case (we assume signal cannot be set faster than we poll)
                     if os.path.isfile(FILE_NAME_LED_ON[i]):
-                        os.remove(FILE_NAME_LED_ON[i])
+                        removed = False
+                        while removed == False:
+                            try:
+                                os.remove(FILE_NAME_LED_ON[i])
+                                removed = True
+                            except:
+                                logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_ON[i])
                     logging.debug("LED %s is OFF", str(i))  # logging.info("LED %s is OFF", str(i))
                     self.LED_ON[i] = 0
         # inform GUI
@@ -1532,6 +1603,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def thread_powerSound(self):
         playsound(configuration.PATH_PREFIX + 'sounds/power_on_off.mp3')
+
+    @pyqtSlot()
+    def closeEvent(self,event):
+        # TEST
+        ######
+        print("printing log_buff:")
+        print(self.log_buff)
+        print("printing info_buff:")
+        print(self.info_buff)
+        ######
+        evt_close_app.set()
+        print("mainWindow closed!")
+        self.close()
 
     @pyqtSlot(bool)
     def on_pbOnOff_toggled(self, checked):
