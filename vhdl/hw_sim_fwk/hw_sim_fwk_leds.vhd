@@ -80,7 +80,9 @@ begin
                     end if;
                 end if;
             end loop;
-        elsif rising_edge(clock) then
+        -- TODO: detect edges on "any" LED in order to behave async?
+        -- elsif (rising_edge(hw_led) or falling_edge(hw_led)) or rising_edge(clock) then
+        elsif (rising_edge(clock) or falling_edge(clock)) then
             -- update file on rising/falling edges
             -- ##################################
             for i in 0 to NR_LEDS - 1 loop
