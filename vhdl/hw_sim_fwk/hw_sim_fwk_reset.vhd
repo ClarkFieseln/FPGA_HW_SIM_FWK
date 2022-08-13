@@ -48,7 +48,6 @@ begin
                 end if;
             end if;
         -- synchronous events
-        -- Note: external simulator changes signals in "falling edge of clock"
         else -- elsif (rising_edge(clock) or falling_edge(clock)) then
             if (PROTOCOL_RESET = true) then
                 report "checking reset_rising/falling_edge..";
