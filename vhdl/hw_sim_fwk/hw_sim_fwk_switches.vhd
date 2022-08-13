@@ -65,8 +65,7 @@ begin
                 end if;
             end loop;
         -- synchronous events    
-        -- Note: external simulator changes signals in "falling edge of clock"
-        elsif falling_edge(clock) then
+        elsif rising_edge(clock) then
             if (PROTOCOL_SWITCHES = true) then
                 report "checking switches_rising/falling_edge..";
             end if;
