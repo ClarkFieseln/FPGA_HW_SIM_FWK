@@ -83,8 +83,9 @@ begin
                 end if;
                 flush(o_file);            
             end if; -- if resetted = false    
-        -- elsif rising_edge(clock) then -- by convention we update DOs "synchronously" on "rising clock edges"
-        elsif (rising_edge(hw_do) or falling_edge(hw_do)) or rising_edge(clock) then
+        -- TODO: check this..
+        -- elsif (rising_edge(hw_do) or falling_edge(hw_do)) or rising_edge(clock) then
+        elsif (rising_edge(hw_do) or falling_edge(hw_do)) or (rising_edge(clock) or falling_edge(clock)) then
             if do_level /= '1' and hw_do = '1' then
                 -- write ONE
                 do_level := '1';
