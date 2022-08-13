@@ -65,8 +65,9 @@ begin
                 end if;
             end loop;
         -- synchronous events    
-        -- Note: external simulator changes signals in "falling edge of clock"
-        elsif falling_edge(clock) then
+        elsif rising_edge(clock) then
+        -- TODO: check this..
+        -- elsif rising_edge(clock) or falling_edge(clock) then -- detect DI changes in both clock edges to give async DIs a chance to be seen (?)
             if (PROTOCOL_DIS = true) then
                 report "checking dis_rising/falling_edge..";
             end if;
