@@ -95,9 +95,8 @@ begin
                     end if;                                        
                 end if; -- if resetted = false
             -- synchronous events    
-            -- Note: external simulator changes signals in "falling edge of clock" or "asynchronously"
-            elsif falling_edge(clock) then -- 1.5 periods delay between DIs and DOs
-            -- elsif rising_edge(clock) then -- 2 periods delay between DIs and DOs
+            elsif rising_edge(clock) then
+            -- TODO: check this..
             -- elsif rising_edge(clock) or falling_edge(clock) then -- detect DI changes in both clock edges to give async DIs a chance to be seen (?)            
             -- else -- similar behavior as: elsif rising_edge(clock) or falling_edge(clock) then
                 if (PROTOCOL_DIS = true) then
