@@ -25,6 +25,12 @@ import functools
 from threading import Lock
 if platform == "win32":
     import win32pipe, win32file, pywintypes
+# NOTE: with a time delay of 1 ~ 15 ms threading.Event.wait() works really bad!
+#       We use oclock.Event.wait() together with set_resolution_ns() instead, which seems to work better, see
+#       https://stackoverflow.com/questions/48984512/making-a-timer-timeout-inaccuracy-of-threading-event-wait-python-3-6
+import oclock
+
+
 # TEST
 #############
 import timeit
@@ -37,19 +43,19 @@ import timeit
 
 
 # TODO: check this..
-# ####### did not change resolution ? ##########
 # from https://discuss.python.org/t/higher-resolution-timers-on-windows/16153
-import ctypes
-ntdll = ctypes.WinDLL('NTDLL.DLL')
-NSEC_PER_SEC = 1000000000
-def set_resolution_ns(resolution):
-    # NtSetTimerResolution uses 100ns units
-    resolution = ctypes.c_ulong(int(resolution // 100))
-    current = ctypes.c_ulong()
-    r = ntdll.NtSetTimerResolution(resolution, 1, ctypes.byref(current))
-    # NtSetTimerResolution uses 100ns units
-    return current.value * 100
-set_resolution_ns(1e-6 * NSEC_PER_SEC) / NSEC_PER_SEC
+if platform == "win32":
+    import ctypes
+    ntdll = ctypes.WinDLL('NTDLL.DLL')
+    NSEC_PER_SEC = 1000000000
+    def set_resolution_ns(resolution):
+        # NtSetTimerResolution uses 100ns units
+        resolution = ctypes.c_ulong(int(resolution // 100))
+        current = ctypes.c_ulong()
+        r = ntdll.NtSetTimerResolution(resolution, 1, ctypes.byref(current))
+        # NtSetTimerResolution uses 100ns units
+        return current.value * 100
+    set_resolution_ns(1e-6 * NSEC_PER_SEC) # / NSEC_PER_SEC
 
 
 # TODOs:
@@ -347,25 +353,25 @@ def createTempFiles():
 
 
 # events used in threads:
-evt_set_power_on = threading.Event()
-evt_set_power_off = threading.Event()
-evt_set_reset_high = threading.Event()
-evt_set_reset_low = threading.Event()
-evt_pause = threading.Event()
-evt_resume = threading.Event()
-evt_step_on = threading.Event()
-evt_do_step = threading.Event()
-# NOTE: we use threading.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
+evt_set_power_on = oclock.Event()
+evt_set_power_off = oclock.Event()
+evt_set_reset_high = oclock.Event()
+evt_set_reset_low = oclock.Event()
+evt_pause = oclock.Event()
+evt_resume = oclock.Event()
+evt_step_on = oclock.Event()
+evt_do_step = oclock.Event()
+# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
 #       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = threading.Event()
-evt_clock = threading.Event()
-evt_close_app = threading.Event()
+evt_wake_up = oclock.Event()
+evt_clock = oclock.Event()
+evt_close_app = oclock.Event()
 # these events improve performance by indicating exactly when the GUI shall update which widgets.
 # NOTE: using individual events for each of the DIs and DOs to "fine tune" GUI update decreases performance!
-evt_gui_di_update = threading.Event() # [] # threading.Event()
-evt_gui_do_update = threading.Event() # [] # threading.Event()
-evt_gui_led_update = threading.Event()
-evt_gui_remain_run_time_update = threading.Event()
+evt_gui_di_update = oclock.Event()
+evt_gui_do_update = oclock.Event()
+evt_gui_led_update = oclock.Event()
+evt_gui_remain_run_time_update = oclock.Event()
 
 # update GUI definitions
 updateGuiDefs()
@@ -535,6 +541,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # TEST
     #############
     freq = 0
+    prev_time = 0
     nr_cycles = 0
     log_buff = ""
     info_buff = ""
@@ -558,10 +565,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # thread to update GUI
     ######################
     def updateGui(self):
-        # TEST
-        ######
-        self.log_buff += str(int(self.freq)) + "\r\n"
-        ######
         # update status on GUI
         ######################
         if (self.lblStatus is not None):
@@ -625,7 +628,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # main loop (toggle signal and sleep)
         while evt_close_app.is_set() == False:
             # time measurement
-            current_time = time.time()
+            start_time = time.time()
             # device on?
             if evt_set_power_on.is_set() == True:
                 # toggle signal
@@ -686,30 +689,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             ##################################
             if (evt_pause.is_set()) == True:
                 evt_resume.wait()
+                self.prev_time = start_time
             elif (evt_step_on.is_set() == True):
                 if self.clock_high == False:
                     while evt_step_on.is_set() == True and evt_do_step.is_set() == False:
                         evt_do_step.wait(CLOCK_PERIOD_SEC / 2)
+                    self.prev_time = start_time
                 else:
                     evt_do_step.clear()  # step done!
                     evt_clock.wait()
                     evt_clock.clear()
             else:
+                # TEST
                 ###################################
                 self.nr_cycles = self.nr_cycles + 1
-                tdiff = time.time() - current_time
+                end_time = time.time()
+                tdiff = start_time - self.prev_time
+                self.prev_time = start_time
                 if tdiff != 0:
-                    self.freq = 1/(tdiff)
-                    # TEST
-                    #####################################
-                    # NOTE: never use print()!
-                    #       Instead, log by append-writing on a variable which is printed at the end.
-                    #       Alternatively you can use logging.info() or write to a file.
-                    self.info_buff += str(tdiff) + "\r\n"
-                    # logging.info(tdiff)
-                    #####################################
-                    if tdiff > CLOCK_PERIOD_SEC:
-                        logging.warning("processing time in scheduler = "+str(tdiff)+" sec exceeds CLOCK_PERIOD_SEC = "+str(CLOCK_PERIOD_SEC))
+                    self.freq = 1.0/(tdiff)
+                    self.log_buff += str(self.freq) + "\r\n"
+                    # self.log_buff += str(self.freq) + ",str(self.nr_cycles)" + "\r\n"
+                    tdiff_sched = end_time - start_time
+                    self.info_buff += str(tdiff_sched) + "\r\n"
+                    if tdiff_sched > (CLOCK_PERIOD_SEC/2):
+                        logging.warning("processing time in scheduler = "+str(tdiff_sched)+" sec exceeds CLOCK_PERIOD_SEC = "+str(CLOCK_PERIOD_SEC))
                         # Note: if you get here you may need to select a higher value for CLOCK_PERIOD_SEC.
                         #       The events generated by thread_clock will not be processed in time by thread_scheduler.
                         #       If there are no external time dependencies, then the simulation may continue to run withtout problems, but at a lower pace as expected.
@@ -912,8 +916,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setObjectName("label_btn_" + str(i))
             label.setText("btn " + str(i))
             # button events
-            self.evt_set_button_on.append(threading.Event())
-            self.evt_set_button_off.append(threading.Event())
+            self.evt_set_button_on.append(oclock.Event())
+            self.evt_set_button_off.append(oclock.Event())
         # switches
         icon_sw = QtGui.QIcon()
         icon_sw.addPixmap(QtGui.QPixmap(":/switch_left/sw_left.png"), QtGui.QIcon.Selected, QtGui.QIcon.Off)
@@ -938,8 +942,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setObjectName("label_sw_" + str(i))
             label.setText("sw " + str(i))
             # button events
-            self.evt_set_switch_on.append(threading.Event())
-            self.evt_set_switch_off.append(threading.Event())
+            self.evt_set_switch_on.append(oclock.Event())
+            self.evt_set_switch_off.append(oclock.Event())
         # LEDs
         icon_led = QtGui.QIcon()
         icon_led.addPixmap(QtGui.QPixmap(":/led_off/led_off.png"), QtGui.QIcon.Selected, QtGui.QIcon.Off)
@@ -961,8 +965,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setObjectName("label_led_" + str(i))
             label.setText("led " + str(i))
             # LED events (not needed for now)
-            # self.evt_set_led_on.append(threading.Event())
-            # self.evt_set_led_off.append(threading.Event())                 
+            # self.evt_set_led_on.append(oclock.Event())
+            # self.evt_set_led_off.append(oclock.Event())
         # set color
         self.lblStatus.setStyleSheet('QLabel {color: green}')
         # disable pause, step and run_for_time
