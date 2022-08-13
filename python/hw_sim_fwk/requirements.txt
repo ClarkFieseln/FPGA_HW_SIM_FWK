@@ -1,4 +1,4 @@
-dataclasses==0.6
-matplotlib==3.3.3
 playsound==1.2.2
-PyQt5==5.15.6
+pywin32==304
+dataclasses==0.6
+PyQt5==5.15.7
