@@ -64,8 +64,7 @@ begin
                 end if;
             end loop;
         -- synchronous events
-        -- Note: external simulator changes signals in "falling edge of clock"
-        elsif falling_edge(clock) then
+        elsif rising_edge(clock) then
             if (PROTOCOL_BUTTONS = true) then
                 report "checking buttons_rising/falling_edge..";
             end if;
