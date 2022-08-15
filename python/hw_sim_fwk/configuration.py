@@ -1,14 +1,15 @@
-# -*- coding: utf-8 -*-
-
-# imports
 from dataclasses import dataclass
 
 
+
 # Version format: MAJOR.MINOR.BUGFIX
-VERSION = "1.0.2"
+VERSION = "1.0.5"
 VERSION_TOOL_TIP = "Basic set of features for demonstration purposes in Windows using FIFOs (named pipes) and shared files.\n\
                     This PoC (Proof of Concept) still needs to be \"improved\" and \"un-extremed\"."
-                    
+
+# execute test code, e.g. to measure performance
+TEST = False
+
 # LOGGING_LEVEL specifies the lowest-severity log message a logger will handle, where debug is the lowest built-in severity level and critical is the highest built-in severity.
 # For example, if the severity level is INFO, the logger will handle only INFO, WARNING, ERROR, and CRITICAL messages and will ignore DEBUG messages.
 LOGGING_LEVEL = "logging.INFO"

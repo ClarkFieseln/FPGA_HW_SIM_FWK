@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 
 import configuration
 import configparser
@@ -9,11 +8,13 @@ import pathlib
 import logging
 
 
+
 # we need this, otherwise we see the Tk window
 Tk().withdraw() 
 
     
 class InitApp(object):
+######################
     config = configparser.ConfigParser(allow_no_value=True)
     config_filename = configuration.CONFIG_FILENAME
     
@@ -235,16 +236,12 @@ class InitApp(object):
         self.config['commonConfig']['BUTTON_PER_IN_CLK_PER'] = str(configuration.BUTTON_PER_IN_CLK_PER) 
         self.config['commonConfig']['BUTTON_TOGGLE_AUTO'] = str(configuration.BUTTON_TOGGLE_AUTO) 
         self.config['commonConfig']['SWITCH_TOGGLE_AUTO'] = str(configuration.SWITCH_TOGGLE_AUTO) 
-        
+        # save configuration
         with open(filename, 'w') as configfile:
             # write new settings into file
             self.config.write(configfile)
             # from now on we have a new filename
             self.config_filename = filename
-
-    
-    
-
 
 
 

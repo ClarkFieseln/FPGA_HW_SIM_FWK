@@ -1,77 +1,55 @@
-# -*- coding: utf-8 -*-
-
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5 import QtGui, QtWidgets, QtCore
-from PyQt5.QtGui import QFont, QIntValidator, QDoubleValidator
+from PyQt5.QtGui import QFont, QIntValidator # , QDoubleValidator
 from time import gmtime, strftime
 from .Ui_mainWindow import Ui_MainWindow
-import configuration
-import init
 from inspect import currentframe
-import os
-import logging
-import traceback
-import threading
-import time
-import random
-from sys import platform
 from playsound import playsound
 # import matplotlib.pyplot as plt
 import tkinter
 import tkinter.messagebox
 from tkinter import filedialog
 import functools
-from threading import Lock
-if platform == "win32":
-    import win32pipe, win32file, pywintypes
+from sys import platform
 # NOTE: with a time delay of 1 ~ 15 ms threading.Event.wait() works really bad!
 #       We use oclock.Event.wait() together with set_resolution_ns() instead, which seems to work better, see
 #       https://stackoverflow.com/questions/48984512/making-a-timer-timeout-inaccuracy-of-threading-event-wait-python-3-6
+import os
+import logging
+import threading
+import time
+# own modules
+import configuration
+import init
 import oclock
+from clock import clock
+from digital_inputs import digital_inputs
+from digital_outputs import digital_outputs
+from leds import leds
+from reset import reset
+from switches import switches
+from buttons import buttons
+from scheduler import scheduler
 
-
-# TEST
-#############
-import timeit
-#############
 
 
 # NOTE: minimize application windows when not needed in order to increase performance.
 #       Intensive work on wave output on the simulator may also affect performance.
+#       Stress tests with CLOCK_PERIOD_EXTERNAL_MIN_MS:
+#       100ms (almost no jitter)
+#       50ms  (small jitter)
+#       10ms  (medium jitter)
+#       1ms   NOK
 ######################################################################################
 
-
-# TODO: check this..
-# from https://discuss.python.org/t/higher-resolution-timers-on-windows/16153
-if platform == "win32":
-    import ctypes
-    ntdll = ctypes.WinDLL('NTDLL.DLL')
-    NSEC_PER_SEC = 1000000000
-    def set_resolution_ns(resolution):
-        # NtSetTimerResolution uses 100ns units
-        resolution = ctypes.c_ulong(int(resolution // 100))
-        current = ctypes.c_ulong()
-        r = ntdll.NtSetTimerResolution(resolution, 1, ctypes.byref(current))
-        # NtSetTimerResolution uses 100ns units
-        return current.value * 100
-    set_resolution_ns(1e-6 * NSEC_PER_SEC) # / NSEC_PER_SEC
-
-
 # TODOs:
-# - remove # TEST code...
-# - improve architecture (mainWindow.py is completely overloaded!)
 # - add analog sensor (e.g. CPU load)
 # - plot signals
 # - add analog readings from file (reproducible tests!)
 # - add serial communication (UART, SPI, I2C,..) e.g. to pass sensor values
 # - improve VHDL code: use blocks, etc.
 # - improve performance: use profiler to get rid of bottlenecks
-
-
-# NOTE: we need root so we can close the messagebox
-root = tkinter.Tk()
-root.withdraw()
 
 # init logging
 logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s',
@@ -80,41 +58,11 @@ logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [
 # current frame
 cf = currentframe()
 
-# module definitions and variables:
-FILE_NAME_RESET_HIGH = None
-FILE_NAME_RESET_LOW = None
-FILE_NAME_CLOCK = None
-# NOTE: using a FIFO to pass data from Python-App to VHDL-Code means that the complete VHDL simulation (in VIVADO) is
-#       "blocked" waiting to receive this data, even if called in a separate "concurrent" (?) process.
-#       Therefore, using a FIFO is recommended only in cases where all DIs are updated in every clock cycle.
-# *********
-USE_DI_FIFO = False # NOTE: this parameter is not in config.ini
-# *********
-if USE_DI_FIFO:
-    FILE_NAME_DI = []
-else:
-    FILE_NAME_DI_HIGH = []
-    FILE_NAME_DI_LOW = []
-SYNC_DI = []
-ASYNC_DI = []
-FILE_NAME_DO = []
-FILE_NAME_SW_HIGH = []
-FILE_NAME_SW_LOW = []
-FILE_NAME_BTN_HIGH = []
-FILE_NAME_BTN_LOW = []
-FILE_NAME_LED_ON = []
-FILE_NAME_LED_OFF = []
-CLOCK_PERIOD_SEC = None
-CLOCK_PERIOD_NS = None
-DI_PERIOD_SEC = None
-SWITCH_PERIOD_SEC = None
-BUTTON_PERIOD_SEC = None
-LED_PERIOD_SEC = None
-DO_PERIOD_SEC = None
+# NOTE: we need root so we can close the messagebox
+root = tkinter.Tk()
+root.withdraw()
 
-
-
-# TODO: solve the bug before use: if user presses OK then it hangs!
+# TODO: solve the bug before use: if user presses OK then it hangs!?
 def timed_messagebox(message, type='info', timeout=3000):
     root = tkinter.Tk()
     root.withdraw()
@@ -129,373 +77,52 @@ def timed_messagebox(message, type='info', timeout=3000):
     except:
         pass
 
-# here only variables/definitions are changed
-# in updateGuiConfig() we change also GUI and other derived things.
-def updateGuiDefs():
-    global FILE_NAME_RESET_HIGH
-    global FILE_NAME_RESET_LOW
-    global FILE_NAME_CLOCK
-    if USE_DI_FIFO:
-        global FILE_NAME_DI
-    else:
-        global FILE_NAME_DI_HIGH
-        global FILE_NAME_DI_LOW
-    global SYNC_DI
-    global ASYNC_DI
-    global FILE_NAME_DO
-    global FILE_NAME_SW_HIGH
-    global FILE_NAME_SW_LOW
-    global FILE_NAME_BTN_HIGH
-    global FILE_NAME_BTN_LOW
-    global FILE_NAME_LED_ON
-    global FILE_NAME_LED_OFF
-    global CLOCK_PERIOD_SEC
-    global CLOCK_PERIOD_NS
-    global DI_PERIOD_SEC
-    global SWITCH_PERIOD_SEC
-    global BUTTON_PERIOD_SEC
-    global LED_PERIOD_SEC
-    global DO_PERIOD_SEC
-    # platform
-    logging.info("platform = " + platform)  # "linux" or "linux2", "win32", "darwin" # OS X
-    if (platform == "linux") or (platform == "linux2"):
-        if ":" in configuration.FILE_PATH:
-            configuration.FILE_PATH = "/tmp/hw_sim_fwk/"
-            logging.warning("configuration.FILE_PATH changed to platform specific path: " + configuration.FILE_PATH)
-    elif (platform == "win32"):
-        if ":" not in configuration.FILE_PATH:
-            configuration.FILE_PATH = "C:/tmp/hw_sim_fwk/"
-            logging.warning("configuration.FILE_PATH changed to platform specific path: " + configuration.FILE_PATH)
-    FILE_NAME_RESET_HIGH = configuration.FILE_PATH + "reset_high"
-    FILE_NAME_RESET_LOW = configuration.FILE_PATH + "reset_low"
-    # clock
-    FILE_NAME_CLOCK = configuration.FIFO_PATH + "clock"
-    # check max nr. of DIs and DOs  
-    if configuration.NR_DIS > configuration.MAX_NR_DI:
-        configuration.NR_DIS = configuration.MAX_NR_DI
-        logging.warning("maximum nr. of digital inputs limited to " + str(configuration.MAX_NR_DI))
-        tkinter.messagebox.showwarning(title="WARNING", message="maximum nr. of digital inputs limited to " + str(
-            configuration.MAX_NR_DI))
-        root.update()
-    if configuration.NR_DOS > configuration.MAX_NR_DO:
-        configuration.NR_DOS = configuration.MAX_NR_DO
-        logging.warning("maximum nr. of digital outputs limited to " + str(configuration.MAX_NR_DO))
-        tkinter.messagebox.showwarning(title="WARNING", message="maximum nr. of digital outputs limited to " + str(
-            configuration.MAX_NR_DO))
-        root.update()
-    # digital inputs
-    if USE_DI_FIFO:
-        FILE_NAME_DI_PART = configuration.FIFO_PATH + "di_"  # temporary variable
-        FILE_NAME_DI = []
-        for i in range(configuration.NR_DIS):
-            FILE_NAME_DI.append(FILE_NAME_DI_PART + str(i))
-    else:
-        FILE_NAME_DI_HIGH_PART = configuration.FILE_PATH + "di_high_"  # temporary variable
-        FILE_NAME_DI_LOW_PART = configuration.FILE_PATH + "di_low_"  # temporary variable
-        FILE_NAME_DI_HIGH = []
-        FILE_NAME_DI_LOW = []
-        for i in range(configuration.NR_DIS):
-            FILE_NAME_DI_HIGH.append(FILE_NAME_DI_HIGH_PART + str(i))
-            FILE_NAME_DI_LOW.append(FILE_NAME_DI_LOW_PART + str(i))
-    SYNC_DI = []
-    ASYNC_DI = []
-    for i in range(configuration.NR_SYNC_DI):
-        SYNC_DI.append(i)
-    for i in range(configuration.NR_ASYNC_DI):
-        ASYNC_DI.append(configuration.NR_ASYNC_DI + i)
-    # digital outputs
-    FILE_NAME_DO_PART = configuration.FIFO_PATH + "do_"  # temporary variable
-    FILE_NAME_DO = []
-    for i in range(configuration.NR_DOS):
-        FILE_NAME_DO.append(FILE_NAME_DO_PART + str(i))
-    # switches        
-    if configuration.NR_SWITCHES > configuration.MAX_NR_SW:
-        configuration.NR_SWITCHES = configuration.MAX_NR_SW
-        logging.warning("maximum nr. of switches limited to " + str(configuration.MAX_NR_SW))
-        tkinter.messagebox.showwarning(title="WARNING",
-                                       message="maximum nr. of switches limited to " + str(configuration.MAX_NR_SW))
-        root.update()
-    FILE_NAME_SW_HIGH_PART = configuration.FILE_PATH + "switch_high_"
-    FILE_NAME_SW_LOW_PART = configuration.FILE_PATH + "switch_low_"
-    FILE_NAME_SW_HIGH = []
-    FILE_NAME_SW_LOW = []
-    for i in range(configuration.NR_SWITCHES):
-        FILE_NAME_SW_HIGH.append(FILE_NAME_SW_HIGH_PART + str(i))
-        FILE_NAME_SW_LOW.append(FILE_NAME_SW_LOW_PART + str(i))
-    # buttons
-    if configuration.NR_BUTTONS > configuration.MAX_NR_BTN:
-        configuration.NR_BUTTONS = configuration.MAX_NR_BTN
-        logging.warning("maximum nr. of buttons limited to " + str(configuration.MAX_NR_BTN))
-    FILE_NAME_BTN_HIGH_PART = configuration.FILE_PATH + "button_high_"
-    FILE_NAME_BTN_LOW_PART = configuration.FILE_PATH + "button_low_"
-    FILE_NAME_BTN_HIGH = []
-    FILE_NAME_BTN_LOW = []
-    for i in range(configuration.NR_BUTTONS):
-        FILE_NAME_BTN_HIGH.append(FILE_NAME_BTN_HIGH_PART + str(i))
-        FILE_NAME_BTN_LOW.append(FILE_NAME_BTN_LOW_PART + str(i))
-    # LEDs
-    if configuration.NR_LEDS > configuration.MAX_NR_LED:
-        configuration.NR_LEDS = configuration.MAX_NR_LED
-        logging.warning("maximum nr. of LEDs limited to " + str(configuration.MAX_NR_LED))
-    FILE_NAME_LED_ON_PART = configuration.FILE_PATH + "led_on_"
-    FILE_NAME_LED_OFF_PART = configuration.FILE_PATH + "led_off_"
-    FILE_NAME_LED_ON = []
-    FILE_NAME_LED_OFF = []
-    for i in range(configuration.NR_LEDS):
-        FILE_NAME_LED_ON.append(FILE_NAME_LED_ON_PART + str(i))
-        FILE_NAME_LED_OFF.append(FILE_NAME_LED_OFF_PART + str(i))
-    # check ranges
-    if configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS <= 0.0:
-        # NOTE: 100 ms hardcoded rescue value.
-        configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS = 100.0
-        logging.error("min. clock period shall be greater than zero. Now set to value = 100 ms")
-        tkinter.messagebox.showerror(title="ERROR",
-                                     message="min. clock period shall be greater than zero. Now set to value = 100 ms")
-        root.update()
-    if configuration.RESET_FOR_SECONDS <= 0.0:
-        # NOTE: 100 ms hardcoded rescue value.
-        configuration.RESET_FOR_SECONDS = 0.1
-        logging.error("min. reset time shall be greater than zero. Now set to value = 1 ms")
-        tkinter.messagebox.showerror(title="ERROR",
-                                     message="min. reset time shall be greater than zero. Now set to value = 1 ms")
-        root.update()
-    if float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) <= 0.0:
-        configuration.CLOCK_PERIOD_EXTERNAL = str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS) + " ms"
-        logging.error("clock period shall be greater than zero. Now set to minimum value = " + str(
-            configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS) + " ms")
-        tkinter.messagebox.showerror(title="ERROR",
-                                     message="clock period shall be greater than zero. Now set to minimum value = " +
-                                             str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS) + " ms")
-        root.update()
-    # NOTE: CLOCK_PERIOD_SEC corresponds exactly to one period in VHDL code.
-    if " fs" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000000000.0
-    elif " ps" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000000.0
-    elif " ns" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000000.0
-    elif " us" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000000.0
-    elif " ms" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) / 1000.0
-    elif " sec" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])
-    elif " min" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) * 60.0
-    elif " min" in configuration.CLOCK_PERIOD_EXTERNAL:
-        CLOCK_PERIOD_SEC = float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0]) * 3600.0
-    else:
-        logging.error("Error: unknown time units in CLOCK_PERIOD_EXTERNAL!")
-        traceback.print_exc()
-        exit(cf.f_lineno)
-    logging.info("CLOCK_PERIOD_SEC = " + str(CLOCK_PERIOD_SEC))
-    # digital input period
-    DI_PERIOD_SEC = CLOCK_PERIOD_SEC * configuration.DI_PER_IN_CLK_PER
-    logging.info("DI_PERIOD_SEC = " + str(DI_PERIOD_SEC))
-    # switch period
-    SWITCH_PERIOD_SEC = CLOCK_PERIOD_SEC * configuration.SW_PER_IN_CLK_PER
-    logging.info("SWITCH_PERIOD_SEC = " + str(SWITCH_PERIOD_SEC))
-    # button period
-    BUTTON_PERIOD_SEC = CLOCK_PERIOD_SEC * configuration.BUTTON_PER_IN_CLK_PER
-    logging.info("BUTTON_PERIOD_SEC = " + str(BUTTON_PERIOD_SEC))
-    # LED period
-    # ASSUMPTION: in worst case the LEDs are switched in every edge of the clock (both rising and falling edges)
-    #             under consideration of jitter we need to be faster than that when polling possible changes,
-    #             thus we define the period to be 1/4th of the clock period.
-    LED_PERIOD_SEC = CLOCK_PERIOD_SEC / 4
-    logging.info("LED_PERIOD_SEC = " + str(LED_PERIOD_SEC))
-    # digital output period
-    # ASSUMPTION: in worst case the DOs are switched in every edge of the clock (both rising and falling edges)
-    #             under consideration of jitter we need to be faster than that when polling possible changes,
-    #             thus we define the period to be 1/4th of the clock period.
-    DO_PERIOD_SEC = CLOCK_PERIOD_SEC / 4
-    logging.info("DO_PERIOD_SEC = " + str(DO_PERIOD_SEC))
-
-
-def init_file_path():
-    # remove dir if it exists (this will clean everything up)
-    if os.path.exists(configuration.FILE_PATH):
-        # Remove files
-        logging.info("FILE_PATH = " + configuration.FILE_PATH + " exists..")
-    else:
-        # create temporary directory
-        os.mkdir(configuration.FILE_PATH)
-        logging.info("FILE_PATH = " + configuration.FILE_PATH + " created..")
-
-
-def createTempFiles():
-    if os.path.exists(FILE_NAME_RESET_HIGH):
-        os.remove(FILE_NAME_RESET_HIGH)
-    if USE_DI_FIFO == False:
-        for i in range(configuration.NR_DIS):
-            if os.path.exists(FILE_NAME_DI_HIGH[i]):
-                os.remove(FILE_NAME_DI_HIGH[i])
-    for i in range(configuration.NR_SWITCHES):
-        f = open(FILE_NAME_SW_LOW[i], "w+")
-        f.close()
-        if os.path.exists(FILE_NAME_SW_HIGH[i]):
-            os.remove(FILE_NAME_SW_HIGH[i])
-    for i in range(configuration.NR_BUTTONS):
-        if os.path.exists(FILE_NAME_BTN_HIGH[i]):
-            os.remove(FILE_NAME_BTN_HIGH[i])
-    for i in range(configuration.NR_LEDS):
-        if os.path.exists(FILE_NAME_LED_ON[i]):
-            os.remove(FILE_NAME_LED_ON[i])
-    for i in range(configuration.NR_SWITCHES):
-        f = open(FILE_NAME_SW_LOW[i], "w+")
-        f.close()
-    for i in range(configuration.NR_BUTTONS):
-        f = open(FILE_NAME_BTN_LOW[i], "w+")
-        f.close()
-    for i in range(configuration.NR_LEDS):
-        f = open(FILE_NAME_LED_OFF[i], "w+")
-        f.close()
-
-
 # events used in threads:
-evt_set_power_on = oclock.Event()
-evt_set_power_off = oclock.Event()
-evt_set_reset_high = oclock.Event()
-evt_set_reset_low = oclock.Event()
-evt_pause = oclock.Event()
-evt_resume = oclock.Event()
-evt_step_on = oclock.Event()
-evt_do_step = oclock.Event()
-# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
-#       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = oclock.Event()
-evt_clock = oclock.Event()
-evt_close_app = oclock.Event()
-# these events improve performance by indicating exactly when the GUI shall update which widgets.
-# NOTE: using individual events for each of the DIs and DOs to "fine tune" GUI update decreases performance!
-evt_gui_di_update = oclock.Event()
-evt_gui_do_update = oclock.Event()
-evt_gui_led_update = oclock.Event()
-evt_gui_remain_run_time_update = oclock.Event()
-
-# update GUI definitions
-updateGuiDefs()
-
-# initialize file path
-init_file_path()
-
-# helper function to create a fifo (named pipe) for writing
-def create_w_fifo(FILE_NAME):
-    fifo_w = None
-    if os.path.exists(FILE_NAME) == False:
-        # Windows
-        if (platform == "win32"):
-            try:
-                fifo_w = win32pipe.CreateNamedPipe(
-                    FILE_NAME,
-                    win32pipe.PIPE_ACCESS_OUTBOUND, # | win32pipe.FILE_FLAG_OVERLAPPED,  # win32pipe.PIPE_ACCESS_DUPLEX,
-                    # the pipe treats the bytes written during each write operation as a message unit:
-                    ##################################################################################
-                    win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT, # win32pipe.PIPE_NOWAIT,
-                    # pipe as a stream of bytes:
-                    ############################
-                    # win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_READMODE_BYTE | win32pipe.PIPE_WAIT, # win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
-                    1, 65536, 65536,
-                    win32pipe.NMPWAIT_USE_DEFAULT_WAIT,  # 0,
-                    None)
-            except pywintypes.error as e:
-                logging.error("could not create pipe for " + FILE_NAME)
-                exit(cf.f_lineno)
-        # Linux
-        else:
-            os.mkfifo(FILE_NAME)
-    # open fifos (named pipes)
-    # NOTE: this is possible only after we send RESET and CLOCK to VHDL Code
-    ########################################################################
-    # TODO: check if we need to close them and where
-    if platform == "win32":
-        try:
-            logging.debug("waiting for client")
-            win32pipe.ConnectNamedPipe(fifo_w, None)
-            logging.debug("got client")
-        except:
-            win32file.CloseHandle(fifo_w)
-            logging.error("could not connect to pipe of " + FILE_NAME)
-            exit(cf.f_lineno)
-    else:
-        fifo_w = open(FILE_NAME, 'w')
-    # return value
-    return fifo_w
+class event():
+    evt_set_power_on = oclock.Event()
+    evt_set_power_off = oclock.Event()
+    evt_set_reset_high = oclock.Event()
+    evt_set_reset_low = oclock.Event()
+    evt_pause = oclock.Event()
+    evt_resume = oclock.Event()
+    evt_step_on = oclock.Event()
+    evt_do_step = oclock.Event()
+    # NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
+    #       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
+    evt_wake_up = oclock.Event()
+    evt_clock = oclock.Event()
+    evt_close_app = oclock.Event()
+    # these events improve performance by indicating exactly when the GUI shall update which widgets.
+    # NOTE: using individual events for each of the DIs and DOs to "fine tune" GUI update decreases performance!
+    evt_gui_di_update = oclock.Event()
+    evt_gui_do_update = oclock.Event()
+    evt_gui_led_update = oclock.Event()
+    evt_gui_remain_run_time_update = oclock.Event()
+# object/instance
+event = event()
 
 
-# helper function to create a fifo (named pipe) for reading
-def create_r_fifo(FILE_NAME):
-    fifo_r = None
-    if platform == "win32":
-        try:
-            logging.info("client, create read named_pipe = " + FILE_NAME)
-            fifo_r = win32pipe.CreateNamedPipe(
-                FILE_NAME,
-                win32pipe.PIPE_ACCESS_INBOUND,  # win32pipe.PIPE_ACCESS_DUPLEX,
-                # the pipe treats the bytes written during each write operation as a message unit:
-                ##################################################################################
-                win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
-                # pipe as stream of bytes:
-                ##########################
-                # win32pipe.PIPE_TYPE_BYTE | win32pipe.PIPE_READMODE_BYTE | win32pipe.PIPE_WAIT,
-                1, 65536, 65536,
-                win32pipe.NMPWAIT_USE_DEFAULT_WAIT,  # 0,
-                None)
-            try:
-                logging.info("waiting for client (or VHDL-server?) for " + FILE_NAME)
-                win32pipe.ConnectNamedPipe(fifo_r, None)
-                logging.info("got client for " + FILE_NAME + " with handle/fifo = " + str(fifo_r))
-            except:
-                logging.error("could not connect to pipe of " + FILE_NAME)
-                win32file.CloseHandle(fifo_r)
-                exit(cf.f_lineno)
-        except pywintypes.error as e:
-            if e.args[0] == 109:
-                logging.error("broken pipe, bye bye")
-            else:
-                logging.error("Error" + str(e))
-            exit(cf.f_lineno)
-    else:
-        if os.path.exists(FILE_NAME == False):
-            os.mkfifo(FILE_NAME)
-        fifo_r = open(FILE_NAME, 'r')
-    # return value
-    return fifo_r
 
 # main window
 #############
 class MainWindow(QMainWindow, Ui_MainWindow):
-    # variables:
-    # app = None  # QApplication
     cfg = None  # __init__.InitApp()
     appStarted = False
     status = ["/", "-", "\\", "|"]
     statusCnt = 0
     csv_file = None
-    toggle = True
+    CLOCK_PERIOD_SEC = [0]
     clock_high = False
-    toggle_switch = True
-    toggle_button = True
-    toggle_di = True
     remaining_time_to_run = 0
-    di_count = 0
-
-    DI_HIGH = [] # value set "synchronously" with "asynchronous" variable in FIFO_W_DI_HIGH[]
-    FIFO_W_DI_HIGH = [] # value written to FIFO (named pipe), set by python code
-    for i in range(configuration.NR_DIS):
-        DI_HIGH.append(0)
-        FIFO_W_DI_HIGH.append(0)
-
-    DO_HIGH = [] # value set "synchronously" with "asynchronous" variable in FIFO_R_DO_HIGH[]
-    FIFO_R_DO_HIGH = [] # value read from FIFO (named pipe), set by VHDL code
-    for i in range(configuration.NR_DOS):
-        DO_HIGH.append(0)
-        FIFO_R_DO_HIGH.append(0)
-
-    LED_ON = []
-    for i in range(configuration.NR_LEDS):
-        LED_ON.append(0)
-
+    # peripheral and app objects
+    clock = None
+    digital_inputs = None
+    digital_outputs = None
+    leds = None
+    reset = None
+    switches = None
+    buttons = None
+    scheduler = None
     # widgets:
     pbKeepPbPressed = None
     button = []
@@ -503,13 +130,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     led = []
     di = []
     do = []
-    # events:
-    evt_set_button_on = []
-    evt_set_button_off = []
-    evt_set_switch_on = []
-    evt_set_switch_off = []
-    # evt_set_led_on = []
-    # evt_set_led_off = []
 
     # information message in terminal
     logging.info("INFO: start the VHDL tool if not yet started..GUI will then show up!")
@@ -517,35 +137,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # TODO: solve bug before use: timed_messagebox("start the VHDL simulator if not done yet..GUI will then show up!", timeout=7000)
     tkinter.messagebox.showinfo(title="INFORMATION", message="Please start the VHDL tool if not yet started!")
     root.update()
-
-    # create temporary files with "inactive" value: in this case LOW, OFF,..
-    f = open(FILE_NAME_RESET_LOW, "w+")
-    f.close()
-
-    # FIFO for clock
-    fifo_w_clock = None # create_w_fifo(FILE_NAME_CLOCK)
-
-    fifo_r_do = []
-    lock_r_do = [] # lock to access FIFO_R_DO_HIGH[]
-    # fill with None or 0 for now...initialization in threads instead.
-    for i in range(configuration.NR_DOS):
-        fifo_r_do.append(0) # None) # open(FILE_NAME_DO[i], 'r'))
-        lock_r_do.append(Lock())
-    fifo_w_di = []
-    lock_w_di = [] # lock to access FIFO_W_DI_HIGH[]
-    # fill with None for now...initialization in threads instead.
-    for i in range(configuration.NR_DIS):
-        fifo_w_di.append(0) # None) # open(FILE_NAME_DI[i], 'w'))
-        lock_w_di.append(Lock())
-
-    # TEST
-    #############
-    freq = 0
-    prev_time = 0
-    nr_cycles = 0
-    log_buff = ""
-    info_buff = ""
-    #############
 
     ######################################################################################
     # NOTE: we don't modify GUI objects from a QThread
@@ -558,8 +149,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         updated = pyqtSignal(str)
         def run(self):
             logging.info("MyGuiUpdateThread:run()")
-            while evt_close_app.is_set() == False:
-                evt_wake_up.wait(1 / configuration.GUI_UPDATE_PERIOD_IN_HZ)
+            while event.evt_close_app.is_set() == False:
+                event.evt_wake_up.wait(1 / configuration.GUI_UPDATE_PERIOD_IN_HZ)
                 self.updated.emit("Hi")
 
     # thread to update GUI
@@ -569,7 +160,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         ######################
         if (self.lblStatus is not None):
             # device on?
-            if evt_set_power_on.is_set() == True:
+            if event.evt_set_power_on.is_set() == True:
                 if configuration.SHOW_LIVE_STATUS:
                     # set alternating symbol
                     self.lblStatus.setText(" " + self.status[self.statusCnt])
@@ -581,26 +172,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     else:
                         self.pbActive.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_green_off.png'))
                 # output LEDs                
-                if evt_gui_led_update.is_set():
-                    evt_gui_led_update.clear()
+                if event.evt_gui_led_update.is_set():
+                    event.evt_gui_led_update.clear()
                     for i in range(configuration.NR_LEDS):
-                        if self.LED_ON[i] == 1:
+                        if self.leds.LED_ON[i] == 1:
                             self.led[i].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_on.png'))
                         else:
                             self.led[i].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_off.png'))
                 # digital inputs
-                if evt_gui_di_update.is_set():
-                    evt_gui_di_update.clear()
+                if event.evt_gui_di_update.is_set():
+                    event.evt_gui_di_update.clear()
                     for i in range(configuration.NR_DIS):
-                        self.di[i].setText(str(self.DI_HIGH[i]))
+                        self.di[i].setText(str(self.digital_inputs.DI_HIGH[i]))
                 # digital outputs
-                if evt_gui_do_update.is_set():
-                    evt_gui_do_update.clear()
+                if event.evt_gui_do_update.is_set():
+                    event.evt_gui_do_update.clear()
                     for i in range(configuration.NR_DOS):
-                        self.do[i].setText(str(self.DO_HIGH[i]))
+                        self.do[i].setText(str(self.digital_outputs.DO_HIGH[i]))
                 # update remaining time when running for time
-                if evt_gui_remain_run_time_update.is_set():
-                    evt_gui_remain_run_time_update.clear()
+                if event.evt_gui_remain_run_time_update.is_set():
+                    event.evt_gui_remain_run_time_update.clear()
                     self.lblRemaining.setText(str(self.remaining_time_to_run))
             else:
                 # stop blinking active LED                                            
@@ -609,137 +200,53 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.pbActive.setChecked(self.pbActive.isChecked())
                     self.pbActive.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_green_off.png'))
 
-    # thread for scheduling synchronous signals
-    # NOTE: tests showed that DIs, DOs, LEDs need 1ms (sometimes 2ms).
-    #       Intensive work on VIVADO simulator, e.g. on wave-output may increase this time up to 5ms.
-    #       Therefore, a maximum data rate between App and VHDL of approx. 200 Hz can be reached.
-    #       A higher rate of about 500Hz will work fine most of the time.
-    #       Any configured rate will not affect the simulation results but just work slower than expected.
-    # NOTE: in order to distribute the processing load we "output" signals (DIs, switches, buttons) in one flank and
-    #       "input" signals (DOs, LEDs) in the other flank. Note the inverted direction with regards VHDL-simulator.
-    ################################################################################################################
-    def thread_scheduler(self, name):
-        logging.info("Thread %s starting", name)
-        # create FIFO for clock
-        # (blocking call)
-        self.fifo_w_clock = create_w_fifo(FILE_NAME_CLOCK)
-        # nr. of counted clock periods
-        clock_periods = 0
-        # main loop (toggle signal and sleep)
-        while evt_close_app.is_set() == False:
-            # time measurement
-            start_time = time.time()
-            # device on?
-            if evt_set_power_on.is_set() == True:
-                # toggle signal
-                if self.toggle == False:
-                    # handle digital inputs
-                    #######################
-                    if clock_periods % configuration.DI_PER_IN_CLK_PER == 0:
-                        # NOTE: uncomment one of these options:
-                        # self.do_di_toggle()
-                        self.do_di_count()
-                    # handle switches
-                    #################
-                    if configuration.SWITCH_TOGGLE_AUTO == True:
-                        if clock_periods % configuration.SW_PER_IN_CLK_PER == 0:
-                            self.do_switch()
-                    # handle buttons
-                    ################
-                    if configuration.BUTTON_TOGGLE_AUTO == True:
-                        if clock_periods % configuration.BUTTON_PER_IN_CLK_PER == 0:
-                            self.do_button()
-                    # handle clock - falling edge
-                    # NOTE: it is important to schedule all tasks first before emulating a clock change
-                    ###################################################################################
-                    self.clock_high = False
-                    # write clock = 0 = LOW
-                    if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_clock, str.encode("0")) # \r\n"))
-                    else:
-                        self.fifo_w_clock.write("0\r\n")
-                        self.fifo_w_clock.flush()
-                else:
-                    # handle clock - raising edge
-                    #############################
-                    self.clock_high = True
-                    # write clock = 1 = HIGH
-                    if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_clock, str.encode("1")) # \r\n"))
-                    else:
-                        self.fifo_w_clock.write("1\r\n")
-                        self.fifo_w_clock.flush()
-                    # handle digital outputs
-                    ########################
-                    self.do_do()
-                    # handle LEDs
-                    #############
-                    self.do_led()
-                    # increment clock periods
-                    #########################
-                    clock_periods = clock_periods + 1
-                # log to csv
-                ############
-                if configuration.LOG_TO_CSV == True:
-                    self.csv_log()
-                # toggle clock signal
-                #####################
-                self.toggle = not self.toggle
-            # wait without consuming resources
-            ##################################
-            if (evt_pause.is_set()) == True:
-                evt_resume.wait()
-                self.prev_time = start_time
-            elif (evt_step_on.is_set() == True):
-                if self.clock_high == False:
-                    while evt_step_on.is_set() == True and evt_do_step.is_set() == False:
-                        evt_do_step.wait(CLOCK_PERIOD_SEC / 2)
-                    self.prev_time = start_time
-                else:
-                    evt_do_step.clear()  # step done!
-                    evt_clock.wait()
-                    evt_clock.clear()
-            else:
-                # TEST
-                ###################################
-                self.nr_cycles = self.nr_cycles + 1
-                end_time = time.time()
-                tdiff = start_time - self.prev_time
-                self.prev_time = start_time
-                if tdiff != 0:
-                    self.freq = 1.0/(tdiff)
-                    self.log_buff += str(self.freq) + "\r\n"
-                    # self.log_buff += str(self.freq) + ",str(self.nr_cycles)" + "\r\n"
-                    tdiff_sched = end_time - start_time
-                    self.info_buff += str(tdiff_sched) + "\r\n"
-                    if tdiff_sched > (CLOCK_PERIOD_SEC/2):
-                        logging.warning("processing time in scheduler = "+str(tdiff_sched)+" sec exceeds CLOCK_PERIOD_SEC = "+str(CLOCK_PERIOD_SEC))
-                        # Note: if you get here you may need to select a higher value for CLOCK_PERIOD_SEC.
-                        #       The events generated by thread_clock will not be processed in time by thread_scheduler.
-                        #       If there are no external time dependencies, then the simulation may continue to run withtout problems, but at a lower pace as expected.
-                ###################################
-                evt_clock.wait()
-                evt_clock.clear()
+    def updateGuiDefs(self):
+        # platform
+        logging.info("platform = " + platform)  # "linux" or "linux2", "win32", "darwin" # OS X
+        if (platform == "linux") or (platform == "linux2"):
+            if ":" in configuration.FILE_PATH:
+                configuration.FILE_PATH = "/tmp/hw_sim_fwk/"
+                logging.warning("configuration.FILE_PATH changed to platform specific path: " + configuration.FILE_PATH)
+        elif (platform == "win32"):
+            if ":" not in configuration.FILE_PATH:
+                configuration.FILE_PATH = "C:/tmp/hw_sim_fwk/"
+                logging.warning("configuration.FILE_PATH changed to platform specific path: " + configuration.FILE_PATH)
+
+    def init_file_path(self):
+        # remove dir if it exists (this will clean everything up)
+        if os.path.exists(configuration.FILE_PATH):
+            # Remove files
+            logging.info("FILE_PATH = " + configuration.FILE_PATH + " exists..")
+        else:
+            # create temporary directory
+            os.mkdir(configuration.FILE_PATH)
+            logging.info("FILE_PATH = " + configuration.FILE_PATH + " created..")
 
     def __init__(self, qApplication, parent=None, sdm_arg=None):
         # call super
         super(MainWindow, self).__init__(parent)
-        # self.app = qApplication
         # load .ini file and set values in GUI
         ######################################
         self.cfg = init.InitApp()
         # InitApp() has read config.ini thus we need to update all definitions
-        updateGuiDefs()
+        self.updateGuiDefs()
         # file path
-        init_file_path()
-        # create temporary files
-        createTempFiles()
-        # update member variables
-        self.updateMemberVariables()
+        self.init_file_path()
         # create file to log
         if configuration.LOG_TO_CSV == True:
             self.csv_file = open("log.csv", 'w')
             self.init_csv_log()
+        # instantiate peripheral and app objects
+        ########################################
+        self.clock = clock(event, self.CLOCK_PERIOD_SEC) # self.CLOCK_PERIOD_SEC is set within this call
+        self.reset = reset(event)
+        self.leds = leds(event, self.CLOCK_PERIOD_SEC)
+        self.switches = switches(event, self.CLOCK_PERIOD_SEC)
+        self.digital_inputs = digital_inputs(event, self.CLOCK_PERIOD_SEC)
+        self.digital_outputs = digital_outputs(event, self.CLOCK_PERIOD_SEC)
+        self.buttons = buttons(event, self.CLOCK_PERIOD_SEC)
+        self.scheduler = scheduler(event, self.CLOCK_PERIOD_SEC, self.csv_log, self.reset, self.leds, self.switches, self.digital_inputs,\
+                                   self.digital_outputs, self.buttons)
         # setup Ui
         self.setupUi(self)
         # further Ui setup
@@ -768,7 +275,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.leSwPerInClkPer.setValidator(QIntValidator())
         self.leBtnPerClkPer.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
         self.leBtnPerClkPer.setValidator(QIntValidator())
-        # set widgets according configuration
         self.lblVersion.setToolTip(configuration.VERSION_TOOL_TIP)
         self.cbPlotShow.setChecked(configuration.SHOW_PLOT)
         self.cbSoundOn.setChecked(configuration.SOUND_EFFECTS)
@@ -816,6 +322,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.pbKeepPbPressed.setFlat(True)
         self.pbKeepPbPressed.setObjectName("jmpKeepPbPressed")
         self.pbKeepPbPressed.setChecked(configuration.KEEP_PB_PRESSED)
+        if configuration.KEEP_PB_PRESSED:
+            self.pbKeepPbPressed.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/jmp_on.png'))
+        else:
+            self.pbKeepPbPressed.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/jmp_off.png'))
         self.pbKeepPbPressed.clicked.connect(functools.partial(self.on_pbKeepPbPressed_clicked))
         label = QtWidgets.QLabel(self.tab_fpga)
         label.setGeometry(QtCore.QRect(175, 215, 58, 56))
@@ -862,6 +372,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         label.setObjectName("dos")
         label.setText("DOx:")
         label.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE - 3))
+        # digital inputs
         for i in range(configuration.NR_DIS):
             # di label
             label = QtWidgets.QLabel(self.tab_fpga)
@@ -874,7 +385,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.di[i].setGeometry(QtCore.QRect(577 - i * 2 * 12 - (i / 4) * 3, 515, 58, 16))
             self.di[i].setStyleSheet("color: rgb(0, 0, 0);")
             self.di[i].setObjectName("di_" + str(i))
-            self.di[i].setText(str(self.DI_HIGH[i]))
+            self.di[i].setText(str(self.digital_inputs.DI_HIGH[i]))
+        # digital outputs
+        for i in range(configuration.NR_DIS):
             # do label
             label = QtWidgets.QLabel(self.tab_fpga)
             label.setGeometry(QtCore.QRect(975 - i * 2 * 12 - (i / 4) * 3, 490, 58, 16))
@@ -886,7 +399,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.do[i].setGeometry(QtCore.QRect(977 - i * 2 * 12 - (i / 4) * 3, 515, 58, 16))
             self.do[i].setStyleSheet("color: rgb(0, 0, 0);")
             self.do[i].setObjectName("do_" + str(i))
-            self.do[i].setText(str(self.DO_HIGH[i]))
+            self.do[i].setText(str(self.digital_outputs.DO_HIGH[i]))
         # buttons
         icon_button = QtGui.QIcon()
         icon_button.addPixmap(QtGui.QPixmap(":/btn_up/btn_up.png"), QtGui.QIcon.Selected, QtGui.QIcon.Off)
@@ -915,9 +428,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setStyleSheet("color: rgb(238, 238, 236);")
             label.setObjectName("label_btn_" + str(i))
             label.setText("btn " + str(i))
-            # button events
-            self.evt_set_button_on.append(oclock.Event())
-            self.evt_set_button_off.append(oclock.Event())
         # switches
         icon_sw = QtGui.QIcon()
         icon_sw.addPixmap(QtGui.QPixmap(":/switch_left/sw_left.png"), QtGui.QIcon.Selected, QtGui.QIcon.Off)
@@ -941,9 +451,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setStyleSheet("color: rgb(238, 238, 236);")
             label.setObjectName("label_sw_" + str(i))
             label.setText("sw " + str(i))
-            # button events
-            self.evt_set_switch_on.append(oclock.Event())
-            self.evt_set_switch_off.append(oclock.Event())
         # LEDs
         icon_led = QtGui.QIcon()
         icon_led.addPixmap(QtGui.QPixmap(":/led_off/led_off.png"), QtGui.QIcon.Selected, QtGui.QIcon.Off)
@@ -964,530 +471,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setStyleSheet("color: rgb(238, 238, 236);")
             label.setObjectName("label_led_" + str(i))
             label.setText("led " + str(i))
-            # LED events (not needed for now)
-            # self.evt_set_led_on.append(oclock.Event())
-            # self.evt_set_led_off.append(oclock.Event())
         # set color
         self.lblStatus.setStyleSheet('QLabel {color: green}')
         # disable pause, step and run_for_time
         self.pbRunPause.setEnabled(False)
         self.pbStep.setEnabled(False)
         self.pbRunForTime.setEnabled(False)
-        # TODO: remove? check why this is not working and if we actually need it.
-        # pause to give user the chance after power on to select use of run, run-for-time or step.
-        # self.on_pbRunPause_toggled(True)
-        ##########################################################################################
         # thread to update GUI periodically
         ###################################
         self._thread = self.MyGuiUpdateThread(self)
         self._thread.updated.connect(self.updateGui)
         self._thread.start()
-        # further threads
-        #################
-        thread_clock = threading.Thread(name="clock_thread", target=self.thread_clock,
-                                            args=("clock_thread",))
-        thread_clock.start()
-        reset_thread = threading.Thread(name="reset_thread", target=self.thread_reset, args=("reset_thread",))
-        reset_thread.start()
-        for j in range(configuration.NR_ASYNC_DI):
-            i = ASYNC_DI[j]
-            thread_name = "di_thread_" + str(i)
-            di_thread = threading.Thread(name=thread_name, target=self.thread_di, args=(thread_name, i))
-            di_thread.start()
-        # sync DI threads only used to create FIFOs
-        if USE_DI_FIFO:
-            for j in range(configuration.NR_SYNC_DI):
-                i = SYNC_DI[j]
-                thread_name = "di_thread_sync_" + str(i)
-                di_thread_sync = threading.Thread(name=thread_name, target=self.thread_di_sync, args=(thread_name, i))
-                di_thread_sync.start()
-        if configuration.SWITCH_TOGGLE_AUTO == False:
-            for i in range(configuration.NR_SWITCHES):
-                thread_name = "switch_thread_" + str(i)
-                switch_thread = threading.Thread(name=thread_name, target=self.thread_switch,
-                                                 args=(thread_name, i,))
-                switch_thread.start()
-        if configuration.BUTTON_TOGGLE_AUTO == False:
-            for i in range(configuration.NR_BUTTONS):
-                thread_name = "button_thread_" + str(i)
-                button_thread = threading.Thread(name=thread_name, target=self.thread_button,
-                                                 args=(thread_name, i,))
-                button_thread.start()
-        for i in range(configuration.NR_DOS):
-            thread_name = "fifo_r_do_thread_" + str(i)
-            do_thread = threading.Thread(name=thread_name, target=self.thread_fifo_r_do, args=(thread_name, i))
-            do_thread.start()
-        scheduler_thread = threading.Thread(name="scheduler_thread", target=self.thread_scheduler,
-                                            args=("scheduler_thread",))
-        scheduler_thread.start()
         # set flag
         self.appStarted = True
-
-    def do_di_toggle(self):
-        if self.toggle_di == False:
-            for j in range(configuration.NR_SYNC_DI):
-                i = SYNC_DI[j]
-                self.DI_HIGH[i] = 0
-                # write DI_i = 0
-                if USE_DI_FIFO:
-                    if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
-                    else:
-                        self.fifo_w_di[i].write("0\r\n")
-                        self.fifo_w_di[i].flush()
-                else:
-                    if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.replace(FILE_NAME_DI_HIGH[i], FILE_NAME_DI_LOW[i])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
-                    else:
-                        f = open(FILE_NAME_DI_LOW[i], "w+")
-                        f.close()
-        else:
-            for j in range(configuration.NR_SYNC_DI):
-                i = SYNC_DI[j]
-                self.DI_HIGH[i] = 1
-                # write DI_i = 1
-                if USE_DI_FIFO:
-                    if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
-                    else:
-                        self.fifo_w_di[i].write("1\r\n")
-                        self.fifo_w_di[i].flush()
-                else:
-                    if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.replace(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
-                    else:
-                        f = open(FILE_NAME_DI_HIGH[i], "w+")
-                        f.close()
-        # toggle signal
-        self.toggle_di = not self.toggle_di
-        # update GUI
-        evt_gui_di_update.set()
-
-    # TODO: investigate if it is possible to set DIs faster.
-    #       Why does it take 1ms to rename/remove a file in Win11 ? Or is this just the poor resolution of time.time() ?
-    # NOTE: 1ms is the default time it takes to set a DI by renaming the shared file or creating it for w+
-    #       But when e.g. switches are used then it may sometimes take 2ms,
-    #       when working intensively on VIVADO's wave-output, tests showed even higher values: 3ms, 4ms, 5ms,..
-    def do_di_count(self):
-        for j in range(configuration.NR_SYNC_DI):
-            i = SYNC_DI[j]
-            if self.di_count & 2 ** j:
-                # need to set bit?
-                if self.DI_HIGH[i] != 1:
-                    self.DI_HIGH[i] = 1
-                    # write DI_i = 1
-                    if USE_DI_FIFO:
-                        if platform == "win32":
-                            win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
-                        else:
-                            self.fifo_w_di[i].write("1\r\n")
-                            self.fifo_w_di[i].flush()
-                    else:
-                        if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                            renamed = False
-                            while renamed == False:
-                                try:
-                                    os.replace(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
-                                    renamed = True
-                                except:
-                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
-                        else:
-                            f = open(FILE_NAME_DI_HIGH[i], "w+")
-                            f.close()
-            else:
-                # need to clear bit?
-                if self.DI_HIGH[i] != 0:
-                    self.DI_HIGH[i] = 0
-                    # write DI_i = 0
-                    if USE_DI_FIFO:
-                        if platform == "win32":
-                            win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
-                        else:
-                            self.fifo_w_di[i].write("0\r\n")
-                            self.fifo_w_di[i].flush()
-                    else:
-                        if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                            renamed = False
-                            while renamed == False:
-                                try:
-                                    os.replace(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
-                                    renamed = True
-                                except:
-                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
-                        else:
-                            f = open(FILE_NAME_DI_LOW[i], "w+")
-                            f.close()
-        self.di_count = (self.di_count + 1) % configuration.MAX_DI_COUNT
-        # update GUI
-        evt_gui_di_update.set()
-
-    def thread_clock(self, name):
-        logging.info("Thread %s: starting", name)
-        # thread loop
-        while evt_close_app.is_set() == False:
-            # raise event for new clock tick
-            evt_clock.set()
-            # wait half clock period
-            evt_wake_up.wait(CLOCK_PERIOD_SEC/2)
-
-    # used only to create FIFOs for synch DIs
-    def thread_di_sync(self, name, i):
-        logging.info("Thread %s: starting", name)
-        # open FIFO for writing
-        self.fifo_w_di[i] = create_w_fifo(FILE_NAME_DI[i])
-
-    # simulate asynchronous DIs changing faster than DI period "expected" by receiver...
-    # alterantively, toggle_di may ease testing by just toggling bits,
-    # be aware also of the period used (can be set to random)
-    def thread_di(self, name, i):
-        logging.info("Thread %s: starting", name)
-        # open FIFO for writing
-        if USE_DI_FIFO:
-            self.fifo_w_di[i] = create_w_fifo(FILE_NAME_DI[i])
-        toggle_di = False
-        # thread loop
-        while evt_close_app.is_set() == False:
-            # device on and not paused?
-            if (evt_set_power_on.is_set() == True) and (evt_pause.is_set() == False) and (
-                    evt_step_on.is_set() == False):
-                # NOTE: use one of the following codes
-                ######################################
-                # if random.randint(0, 1):
-                if toggle_di == False:
-                ######################################
-                    self.DI_HIGH[i] = 0
-                    # write DI_i = 0
-                    if USE_DI_FIFO:
-                        if platform == "win32":
-                            win32file.WriteFile(self.fifo_w_di[i], str.encode("0\r\n"))
-                        else:
-                            self.fifo_w_di[i].write("0\r\n")
-                            self.fifo_w_di[i].flush()
-                    else:
-                        if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                            renamed = False
-                            while renamed == False:
-                                try:
-                                    os.replace(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
-                                    renamed = True
-                                except:
-                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
-                        else:
-                            f = open(FILE_NAME_DI_LOW[i], "w+")
-                            f.close()
-                else:
-                    self.DI_HIGH[i] = 1
-                    # write DI_i = 1
-                    if USE_DI_FIFO:
-                        if platform == "win32":
-                            win32file.WriteFile(self.fifo_w_di[i], str.encode("1\r\n"))
-                        else:
-                            self.fifo_w_di[i].write("1\r\n")
-                            self.fifo_w_di[i].flush()
-                    else:
-                        if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                            renamed = False
-                            while renamed == False:
-                                try:
-                                    os.replace(FILE_NAME_DI_LOW[i],FILE_NAME_DI_HIGH[i])
-                                    renamed = True
-                                except:
-                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
-                        else:
-                            f = open(FILE_NAME_DI_HIGH[i], "w+")
-                            f.close()
-                # toggle signal
-                toggle_di = not toggle_di
-                # inform GUI
-                evt_gui_di_update.set()
-            # NOTE: use one of the following codes
-            ######################################
-            # wait DI period
-            # NOTE: although in theory we shall have here a "repeatable and synchronized" behavior
-            #       between sync and async DIs, in reality we don't.
-            #       The call to wait(DI_PERIOD_SEC) will not be in sync with the scheduler where
-            #       sync DIs are updated.
-            #       Therefore, the complete DI values (sync + async) will not be regular/periodic in the wave output.
-            evt_wake_up.wait(DI_PERIOD_SEC)
-            # wait random time within defined limits
-            # evt_wake_up.wait(random.uniform(CLOCK_PERIOD_SEC, DI_PERIOD_SEC))
-            ######################################
-
-    def thread_fifo_r_do(self, name, i):
-        logging.info("Thread %s: starting", name)
-        # open FIFO for reading
-        self.fifo_r_do[i] = create_r_fifo(FILE_NAME_DO[i])
-        # thread loop
-        while evt_close_app.is_set() == False:
-            # read DO_x FIFO
-            ################
-            if platform == "win32":
-                try:
-                    line = win32file.ReadFile(self.fifo_r_do[i], 64*1024)
-                    # NOTE: keep variable line compatible with FIFO read in linux
-                    # temp_line_int = int.from_bytes(line[1]); # str(line[1], 'utf-8') # TODO: why nok?
-                    temp_line_str = str(line[1], 'utf-8')
-                except:
-                    logging.error("could not read from pipe of DO_" + str(i))
-                    win32file.CloseHandle(self.fifo_r_do[i])
-            else:
-                temp_line_str = self.fifo_r_do[i].read() # .readline()
-            try:
-                temp_line_int = int(temp_line_str)
-            except ValueError:
-                temp_line_int = 0
-            # process DO_x info from FIFO
-            #############################
-            self.lock_r_do[i].acquire()
-            self.FIFO_R_DO_HIGH[i] = temp_line_int
-            self.lock_r_do[i].release()
-
-    def do_switch(self):
-        if self.toggle_switch == False:
-            for i in range(configuration.NR_SWITCHES):
-                if os.path.isfile(FILE_NAME_SW_HIGH[i]):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_SW_HIGH[i],FILE_NAME_SW_LOW[i])
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[i])
-                else:
-                    f = open(FILE_NAME_SW_LOW[i], "w+")
-                    f.close()
-        else:
-            for i in range(configuration.NR_SWITCHES):
-                if os.path.isfile(FILE_NAME_SW_LOW[i]):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_SW_LOW[i],FILE_NAME_SW_HIGH[i])
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[i])
-                else:
-                    f = open(FILE_NAME_SW_HIGH[i], "w+")
-                    f.close()
-        # toggle signal
-        self.toggle_switch = not self.toggle_switch
-
-    def do_button(self):
-        if self.toggle_button == False:
-            for i in range(configuration.NR_BUTTONS):
-                if os.path.isfile(FILE_NAME_BTN_HIGH[i]):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_BTN_HIGH[i],FILE_NAME_BTN_LOW[i])
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_HIGH[i])
-                else:
-                    f = open(FILE_NAME_BTN_LOW[i], "w+")
-                    f.close()
-            logging.debug("Buttons set to LOW (auto)")
-        else:
-            for i in range(configuration.NR_BUTTONS):
-                if os.path.isfile(FILE_NAME_BTN_LOW[i]):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_BTN_LOW[i],FILE_NAME_BTN_HIGH[i])
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_LOW[i])
-                else:
-                    f = open(FILE_NAME_BTN_HIGH[i], "w+")
-                    f.close()
-            logging.debug("Buttons set to HIGH (auto)")
-        self.toggle_button = not self.toggle_button
-
-    def thread_switch(self, name, idx):
-        logging.info("Thread %s(%s): starting", name, str(idx))
-        # thread loop
-        while evt_close_app.is_set() == False:
-            if configuration.SWITCH_TOGGLE_AUTO == False:
-                if self.evt_set_switch_on[idx].is_set() == False:
-                    if os.path.isfile(FILE_NAME_SW_HIGH[idx]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.replace(FILE_NAME_SW_HIGH[idx],FILE_NAME_SW_LOW[idx])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_HIGH[idx])
-                    else:
-                        f = open(FILE_NAME_SW_LOW[idx], "w+")
-                        f.close()
-                    logging.info("Switch (" + str(idx) + ") = OFF")
-                    self.evt_set_switch_on[idx].wait()
-                else:
-                    if os.path.isfile(FILE_NAME_SW_LOW[idx]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.replace(FILE_NAME_SW_LOW[idx],FILE_NAME_SW_HIGH[idx])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_SW_LOW[idx])
-                    else:
-                        f = open(FILE_NAME_SW_HIGH[idx], "w+")
-                        f.close()
-                    logging.info("Switch (" + str(idx) + ") = ON")
-                    self.evt_set_switch_off[idx].wait()
-            else:
-                evt_wake_up.wait(CLOCK_PERIOD_SEC / 2)
-
-    def thread_button(self, name, idx):
-        logging.info("Thread %s(%s): starting", name, str(idx))
-        # thread loop
-        while evt_close_app.is_set() == False:
-            if self.evt_set_button_on[idx].is_set() == False:
-                if os.path.isfile(FILE_NAME_BTN_HIGH[idx]):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_BTN_HIGH[idx],FILE_NAME_BTN_LOW[idx])
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_HIGH[idx])
-                else:
-                    f = open(FILE_NAME_BTN_LOW[idx], "w+")
-                    f.close()
-                logging.info("Button (" + str(idx) + ") = LOW")
-                self.evt_set_button_on[idx].wait()
-            else:
-                if os.path.isfile(FILE_NAME_BTN_LOW[idx]):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_BTN_LOW[idx],FILE_NAME_BTN_HIGH[idx])
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_BTN_LOW[idx])
-                else:
-                    f = open(FILE_NAME_BTN_HIGH[idx], "w+")
-                    f.close()
-                logging.info("Button (" + str(idx) + ") = HIGH")
-                self.evt_set_button_off[idx].wait()
-
-    def thread_reset(self, name):
-        logging.info("Thread %s: starting", name)
-        # thread loop
-        while evt_close_app.is_set() == False:
-            if evt_set_reset_high.is_set() == False:
-                if os.path.isfile(FILE_NAME_RESET_HIGH):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_RESET_HIGH,FILE_NAME_RESET_LOW)
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_RESET_HIGH)
-                else:
-                    f = open(FILE_NAME_RESET_LOW, "w+")
-                    f.close()
-                logging.info("Reset set to LOW")
-                evt_set_reset_high.wait()
-            else:
-                if os.path.isfile(FILE_NAME_RESET_LOW):
-                    renamed = False
-                    while renamed == False:
-                        try:
-                            os.replace(FILE_NAME_RESET_LOW,FILE_NAME_RESET_HIGH)
-                            renamed = True
-                        except:
-                            logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_RESET_LOW)
-                else:
-                    f = open(FILE_NAME_RESET_HIGH, "w+")
-                    f.close()
-                logging.info("Reset set to HIGH")
-                evt_set_reset_low.wait()
-
-    def do_led(self):
-        for i in range(configuration.NR_LEDS):
-            if self.LED_ON[i] == 0:
-                if os.path.isfile(FILE_NAME_LED_ON[i]):
-                    removed = False
-                    while removed == False:
-                        try:
-                            os.remove(FILE_NAME_LED_ON[i])
-                            removed = True
-                        except:
-                            logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_ON[i])
-                    # clean up just in case (we assume signal cannot be set faster than we poll)
-                    if os.path.isfile(FILE_NAME_LED_OFF[i]):
-                        removed = False
-                        while removed == False:
-                            try:
-                                os.remove(FILE_NAME_LED_OFF[i])
-                                removed = True
-                            except:
-                                logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_OFF[i])
-                    logging.debug("LED %s is ON", str(i))  # logging.info("LED %s is ON", str(i))
-                    self.LED_ON[i] = 1
-            else:
-                if os.path.isfile(FILE_NAME_LED_OFF[i]):
-                    removed = False
-                    while removed == False:
-                        try:
-                            os.remove(FILE_NAME_LED_OFF[i])
-                            removed = True
-                        except:
-                            logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_OFF[i])
-                    # clean up just in case (we assume signal cannot be set faster than we poll)
-                    if os.path.isfile(FILE_NAME_LED_ON[i]):
-                        removed = False
-                        while removed == False:
-                            try:
-                                os.remove(FILE_NAME_LED_ON[i])
-                                removed = True
-                            except:
-                                logging.warning("File cannot be removed, we try again. File = " + FILE_NAME_LED_ON[i])
-                    logging.debug("LED %s is OFF", str(i))  # logging.info("LED %s is OFF", str(i))
-                    self.LED_ON[i] = 0
-        # inform GUI
-        evt_gui_led_update.set()
-
-    def do_do(self):
-        for i in range(configuration.NR_DOS):
-            if self.DO_HIGH[i] == 0:
-                # first check if FIFO_R_DO_HIGH[i] is currently being set
-                # assumption: if locked, lock will be soon released, no need for max. retry count
-                while self.lock_r_do[i].locked()  == True:
-                    logging.warning("lock for DO[" + str(i) + "] is locked!")
-                    # assumption: we don't need to introduce a pause here e.g. with sleep or wait
-                self.lock_r_do[i].acquire()
-                if self.FIFO_R_DO_HIGH[i] == 1:
-                    logging.debug("DO %s is HIGH", str(i))
-                    self.DO_HIGH[i] = 1
-                self.lock_r_do[i].release()
-            else:
-                # first check if FIFO_R_DO_HIGH[i] is currently being set
-                # assumption: if locked, lock will be soon released, no need for max. retry count
-                while self.lock_r_do[i].locked() == True:
-                    logging.warning("lock for DO[" + str(i) + "] is locked!")
-                    # assumption: we don't need to introduce a pause here e.g. with sleep or wait
-                self.lock_r_do[i].acquire()
-                if self.FIFO_R_DO_HIGH[i] == 0:
-                    logging.debug("DO %s is LOW", str(i))
-                    self.DO_HIGH[i] = 0
-                self.lock_r_do[i].release()
-        # inform GUI
-        evt_gui_do_update.set()
 
     def init_csv_log(self):
         if self.csv_file.closed == False:
@@ -1508,38 +504,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def csv_log(self):
         if self.csv_file.closed == False:
             level = 30
-            row = str(int(self.toggle) + level) + ","
+            row = str(int(self.scheduler.toggle) + level) + ","
             level = level - 2
-            row += str(int(evt_set_reset_high.is_set()) + level) + ","
+            row += str(int(event.evt_set_reset_high.is_set()) + level) + ","
             level = level - 2
             for i in range(configuration.NR_DIS):
-                row += str(self.DI_HIGH[configuration.NR_DIS - 1 - i] + level) + ","
+                row += str(self.digital_inputs.DI_HIGH[configuration.NR_DIS - 1 - i] + level) + ","
                 level = level - 2
             for i in range(configuration.NR_DOS):
-                row += str(self.DO_HIGH[configuration.NR_DOS - 1 - i] + level) + ","
+                row += str(self.digital_outputs.DO_HIGH[configuration.NR_DOS - 1 - i] + level) + ","
                 level = level - 2
-            row += str(int(self.toggle_switch) + level) + ","
+            row += str(int(self.switches.toggle_switch) + level) + ","
             level = level - 2
-            row += str(int(self.toggle_button) + level) + ","
+            row += str(int(self.buttons.toggle_button) + level) + ","
             level = level - 2
             for i in range(configuration.NR_LEDS):
-                row += str(self.LED_ON[configuration.NR_LEDS - 1 - i] + level) + ","
+                row += str(self.leds.LED_ON[configuration.NR_LEDS - 1 - i] + level) + ","
                 level = level - 2
             # logging.debug(row)
             row += "\n"
             self.csv_file.write(row)
-
-    # TODO: need to update threads as well..
-    def updateMemberVariables(self):
-        self.DI_HIGH = []
-        for i in range(configuration.NR_DIS):
-            self.DI_HIGH.append(0)
-        self.DO_HIGH = []
-        for i in range(configuration.NR_DOS):
-            self.DO_HIGH.append(0)
-        self.LED_ON = []
-        for i in range(configuration.NR_LEDS):
-            self.LED_ON.append(0)
 
     def updateGuiConfig(self):
         # update logging level
@@ -1549,7 +533,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         logging.basicConfig(format=format, datefmt='%H:%M:%S:%m', level=configuration.LOGGING_LEVEL)
         # simulator options        
         self.leClkPeriods.setText(str(configuration.RUN_FOR_CLOCK_PERIODS))
-        self.leClkPeriodMs.setText(str(float(CLOCK_PERIOD_SEC * 1000.0)))
+        self.leClkPeriodMs.setText(str(float(self.CLOCK_PERIOD_SEC[0] * 1000.0)))
         self.leGuiRefreshHz.setText(str(configuration.GUI_UPDATE_PERIOD_IN_HZ))
         self.pbKeepPbPressed.setChecked(configuration.KEEP_PB_PRESSED)
 
@@ -1559,50 +543,46 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def on_button_clicked(self, idx):
         if configuration.KEEP_PB_PRESSED == True:
             if configuration.SOUND_EFFECTS:
-                # play this sound in a separate thread in order not to block
                 buttonSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
                 buttonSoundThread.start()
-            if self.evt_set_button_on[idx].is_set() == True:
-                self.evt_set_button_on[idx].clear()
-                self.evt_set_button_off[idx].set()
+            if self.buttons.evt_set_button_on[idx].is_set() == True:
+                self.buttons.evt_set_button_on[idx].clear()
+                self.buttons.evt_set_button_off[idx].set()
                 self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_up.png'))
             else:
-                self.evt_set_button_off[idx].clear()
-                self.evt_set_button_on[idx].set()
+                self.buttons.evt_set_button_off[idx].clear()
+                self.buttons.evt_set_button_on[idx].set()
                 self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
 
     def on_button_pressed(self, idx):
         if configuration.KEEP_PB_PRESSED == False:
             if configuration.SOUND_EFFECTS:
-                # play this sound in a separate thread in order not to block
                 buttonSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
                 buttonSoundThread.start()
-            self.evt_set_button_off[idx].clear()
-            self.evt_set_button_on[idx].set()
+            self.buttons.evt_set_button_off[idx].clear()
+            self.buttons.evt_set_button_on[idx].set()
             self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
 
     def on_button_released(self, idx):
         if configuration.KEEP_PB_PRESSED == False:
             if configuration.SOUND_EFFECTS:
-                # play this sound in a separate thread in order not to block
                 buttonSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
                 buttonSoundThread.start()
-            self.evt_set_button_on[idx].clear()
-            self.evt_set_button_off[idx].set()
+            self.buttons.evt_set_button_on[idx].clear()
+            self.buttons.evt_set_button_off[idx].set()
             self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_up.png'))
 
     def on_switch_clicked(self, idx):
         if configuration.SOUND_EFFECTS:
-            # play this sound in a separate thread in order not to block
             buttonSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
             buttonSoundThread.start()
-        if self.evt_set_switch_on[idx].is_set() == True:
-            self.evt_set_switch_on[idx].clear()
-            self.evt_set_switch_off[idx].set()
+        if self.switches.evt_set_switch_on[idx].is_set() == True:
+            self.switches.evt_set_switch_on[idx].clear()
+            self.switches.evt_set_switch_off[idx].set()
             self.switch[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/sw_left.png'))
         else:
-            self.evt_set_switch_off[idx].clear()
-            self.evt_set_switch_on[idx].set()
+            self.switches.evt_set_switch_off[idx].clear()
+            self.switches.evt_set_switch_on[idx].set()
             self.switch[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/sw_right.png'))
 
     def thread_powerSound(self):
@@ -1610,15 +590,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     @pyqtSlot()
     def closeEvent(self,event):
-        # TEST
-        ######
-        print("printing log_buff:")
-        print(self.log_buff)
-        print("printing info_buff:")
-        print(self.info_buff)
-        ######
-        evt_close_app.set()
-        print("mainWindow closed!")
+        if configuration.TEST:
+            logging.info("printing log_buff:")
+            logging.info(self.scheduler.log_buff)
+            logging.info("printing info_buff:")
+            logging.info(self.scheduler.info_buff)
+        event.evt_close_app.set()
+        logging.info("mainWindow closed!")
         self.close()
 
     @pyqtSlot(bool)
@@ -1630,17 +608,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.csv_file = open("log.csv", 'w')
                     self.init_csv_log()
             # power on
-            evt_set_power_off.clear()
-            evt_set_power_on.set()
+            event.evt_set_power_off.clear()
+            event.evt_set_power_on.set()
             self.pbOnOff.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/off.png'))
             self.pbActive.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_green_on.png'))
             # set RESET to high for T/2 in order to initialize VHDL signals
-            evt_set_reset_low.clear()
-            evt_set_reset_high.set()
+            event.evt_set_reset_low.clear()
+            event.evt_set_reset_high.set()
             time.sleep(configuration.RESET_FOR_SECONDS)
-            evt_set_reset_high.clear()
-            evt_set_reset_low.set()
-            # time.sleep(CLOCK_PERIOD_SEC/2) # need this?            
+            event.evt_set_reset_high.clear()
+            event.evt_set_reset_low.set()
+            # time.sleep(self.CLOCK_PERIOD_SEC[0]/2) # need this?
             # enable pause and step
             self.pbRunPause.setEnabled(True)
             self.pbStep.setEnabled(True)
@@ -1651,8 +629,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.pbStep.setEnabled(False)
             self.pbRunForTime.setEnabled(False)
             # power off
-            evt_set_power_on.clear()
-            evt_set_power_off.set()
+            event.evt_set_power_on.clear()
+            event.evt_set_power_off.set()
             self.pbOnOff.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/on.png'))
             self.pbActive.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_green_off.png'))
             # close log file
@@ -1661,42 +639,39 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.csv_file.close()
         # on
         if configuration.SOUND_EFFECTS:
-            # play this sound in a separate thread in order not to block
             powerSoundThread = threading.Thread(name="powerSound", target=self.thread_powerSound)
             powerSoundThread.start()
 
     @pyqtSlot(bool)
     def on_pbRunPause_toggled(self, checked):
-        if evt_pause.is_set() == False:  # if checked == True:
-            evt_resume.clear()
-            evt_pause.set()
+        if event.evt_pause.is_set() == False:  # if checked == True:
+            event.evt_resume.clear()
+            event.evt_pause.set()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/run.png'))
         else:
             # check if we need to remove step
-            if evt_step_on.is_set() == True:
-                evt_step_on.clear()
+            if event.evt_step_on.is_set() == True:
+                event.evt_step_on.clear()
             # resume
-            evt_pause.clear()
-            evt_resume.set()
+            event.evt_pause.clear()
+            event.evt_resume.set()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/pause.png'))
         if configuration.SOUND_EFFECTS:
-            # play this sound in a separate thread in order not to block
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
             powerSoundThread.start()
 
     @pyqtSlot(bool)
     def on_pbStep_toggled(self, checked):
-        if evt_step_on.is_set() == False:
-            evt_step_on.set()
-        evt_do_step.set()
-        if evt_pause.is_set() == True:
+        if event.evt_step_on.is_set() == False:
+            event.evt_step_on.set()
+        event.evt_do_step.set()
+        if event.evt_pause.is_set() == True:
             # resume
-            evt_pause.clear()
-            evt_resume.set()
+            event.evt_pause.clear()
+            event.evt_resume.set()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/pause.png'))
         logging.info("STEP")
         if configuration.SOUND_EFFECTS:
-            # play this sound in a separate thread in order not to block
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
             powerSoundThread.start()
 
@@ -1704,17 +679,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         logging.info("Run for " + str(configuration.RUN_FOR_CLOCK_PERIODS) + " clock cycles.")
         # wait for specified time (dummy event evt_wake_up never comes)
         self.remaining_time_to_run = configuration.RUN_FOR_CLOCK_PERIODS
-        while ((self.remaining_time_to_run > 0) and (evt_pause.is_set() == False) and (evt_step_on.is_set() == False)):
-            evt_wake_up.wait(CLOCK_PERIOD_SEC)
+        while ((self.remaining_time_to_run > 0) and (event.evt_pause.is_set() == False) and (event.evt_step_on.is_set() == False)):
+            event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0])
             self.remaining_time_to_run = self.remaining_time_to_run - 1
             # update GUI
-            evt_gui_remain_run_time_update.set()
+            event.evt_gui_remain_run_time_update.set()
         if self.remaining_time_to_run > 0:
             logging.info("Run for time expired, simulation was paused or stepped_on")
         else:
             # time expired, now pause
-            evt_pause.set()
-            evt_resume.clear()
+            event.evt_pause.set()
+            event.evt_resume.clear()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/run.png'))
             logging.info("Run for time expired, now pause")
         # re-enable button
@@ -1725,33 +700,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # disable button during timed run
         self.pbRunForTime.setEnabled(False)
         # resume if necessary
-        if evt_step_on.is_set():
-            evt_step_on.clear()
-        if (evt_pause.is_set() == True):
+        if event.evt_step_on.is_set():
+            event.evt_step_on.clear()
+        if (event.evt_pause.is_set() == True):
             # resume
-            evt_pause.clear()
-            evt_resume.set()
+            event.evt_pause.clear()
+            event.evt_resume.set()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/pause.png'))
         # run for time in a separate thread in order not to block
         runForTimeThread = threading.Thread(name="runForTime", target=self.thread_runForTime)
         runForTimeThread.start()
         if configuration.SOUND_EFFECTS:
-            # play this sound in a separate thread in order not to block
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
             powerSoundThread.start()
 
     @pyqtSlot(bool)
     def on_pbReset_toggled(self, checked):
-        if evt_set_reset_high.is_set() == True:
-            evt_set_reset_high.clear()
-            evt_set_reset_low.set()
+        if event.evt_set_reset_high.is_set() == True:
+            event.evt_set_reset_high.clear()
+            event.evt_set_reset_low.set()
             self.lblReset.setText("RESET: low")
         else:
-            evt_set_reset_low.clear()
-            evt_set_reset_high.set()
+            event.evt_set_reset_low.clear()
+            event.evt_set_reset_high.set()
             self.lblReset.setText("RESET: high")
         if configuration.SOUND_EFFECTS:
-            # play this sound in a separate thread in order not to block
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_powerSound)
             powerSoundThread.start()
 
@@ -1786,7 +759,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 configuration.CLOCK_PERIOD_EXTERNAL = str(tempValue * 1000000.0) + " ns"
                 # update GUI definitions (e.g. values to change polling rate of threads)
-                updateGuiDefs()
+                self.updateGuiDefs()
+                self.buttons.updateGuiDefs()
+                self.digital_inputs.updateGuiDefs()
+                self.digital_outputs.updateGuiDefs()
+                self.leds.updateGuiDefs()
+                self.reset.updateGuiDefs()
+                self.switches.updateGuiDefs()
+                self.scheduler.updateGuiDefs()
         except:
             # NOTE: set text to current value
             self.leClkPeriodMs.setText(str(float(configuration.CLOCK_PERIOD_EXTERNAL.partition(" ")[0])))
@@ -1807,7 +787,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 configuration.RESET_FOR_SECONDS = str(tempValue)
                 # update GUI definitions (e.g. values to change polling rate of threads)
-                updateGuiDefs()
+                self.updateGuiDefs()
+                self.buttons.updateGuiDefs()
+                self.digital_inputs.updateGuiDefs()
+                self.digital_outputs.updateGuiDefs()
+                self.leds.updateGuiDefs()
+                self.reset.updateGuiDefs()
+                self.switches.updateGuiDefs()
+                self.scheduler.updateGuiDefs()
         except:
             # NOTE: set text to current value
             self.leResetSecs.setText(str('%.24f' % configuration.RESET_FOR_SECONDS).rstrip('0').rstrip('.'))
@@ -1842,7 +829,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         else:
             self.pbKeepPbPressed.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/jmp_off.png'))
         if configuration.SOUND_EFFECTS:
-            # play this sound in a separate thread in order not to block
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_powerSound)
             powerSoundThread.start()
 
@@ -1988,9 +974,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # update widget
             self.leFilePath.setText(configuration.FILE_PATH)
             # initialize file path
-            init_file_path()
+            self.init_file_path()
+            # update GUI definitions
+            self.updateGuiDefs()
+            self.buttons.updateGuiDefs()
+            self.digital_inputs.updateGuiDefs()
+            self.digital_outputs.updateGuiDefs()
+            self.leds.updateGuiDefs()
+            self.reset.updateGuiDefs()
+            self.switches.updateGuiDefs()
+            self.scheduler.updateGuiDefs()
             # create temporary files
-            createTempFiles()
+            self.digital_inputs.createTempFiles()
+            self.switches.createTempFiles()
+            self.leds.createTempFiles()
+            self.reset.createTempFiles()
+            self.switches.createTempFiles()
+            self.buttons.createTempFiles()
             logging.warning(
                 "FILE_PATH updated. New value will take effect after saving configuration and restarting application!")
             tkinter.messagebox.showwarning(title="WARNING",
@@ -2088,12 +1088,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # update NR_SYNC_DI and combobox
                 configuration.NR_SYNC_DI = configuration.NR_DIS - configuration.NR_ASYNC_DI
                 # update lists
-                SYNC_DI.clear()
-                ASYNC_DI.clear()
-                for i in range(configuration.NR_SYNC_DI):
-                    SYNC_DI.append(i)
-                for i in range(configuration.NR_ASYNC_DI):
-                    ASYNC_DI.append(configuration.NR_ASYNC_DI + i)
+                self.digital_inputs.updateNrDisOrAsyncDis()
             elif configuration.NR_DIS + 1 > self.cbNrAsyncDis.count():
                 count = self.cbNrAsyncDis.count()
                 for i in range(configuration.NR_DIS + 1 - count):
@@ -2105,32 +1100,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             configuration.NR_ASYNC_DI = index
             configuration.NR_SYNC_DI = configuration.NR_DIS - configuration.NR_ASYNC_DI
             # update lists
-            SYNC_DI.clear()
-            ASYNC_DI.clear()
-            for i in range(configuration.NR_SYNC_DI):
-                SYNC_DI.append(i)
-            for i in range(configuration.NR_ASYNC_DI):
-                ASYNC_DI.append(configuration.NR_ASYNC_DI + i)
+            self.digital_inputs.updateNrDisOrAsyncDis()
 
     @pyqtSlot(int)
     def on_cbNrDos_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_DOS = index
+        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
+        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbNrBtns_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_BUTTONS = index
+        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
+        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbNrSwitches_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_SWITCHES = index
+        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
+        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbNrLeds_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_LEDS = index
+        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
+        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbMaxDiCount_currentIndexChanged(self, index):
@@ -2146,3 +1144,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def on_cbSwToggleAuto_clicked(self):
         if configuration.SWITCH_TOGGLE_AUTO != self.cbSwToggleAuto.isChecked():
             configuration.SWITCH_TOGGLE_AUTO = self.cbSwToggleAuto.isChecked()
+
+
+

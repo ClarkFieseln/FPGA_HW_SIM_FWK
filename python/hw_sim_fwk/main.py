@@ -1,4 +1,3 @@
-
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QFont
 from ui.mainWindow import MainWindow
@@ -6,6 +5,7 @@ import sys
 import configuration
 import logging
 import configparser
+
 
 
 def initConfig():

@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
-
 # alternatively run in your console (with internet connection!):
 # > pipreqs --force ./ --ignore backups
 # ##############################################################
 
 import shlex,  subprocess
+
 
 
 print("Updating requirements.txt..")
