@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 
 # Version format: MAJOR.MINOR.BUGFIX
-VERSION = "1.0.5"
+VERSION = "1.0.7"
 VERSION_TOOL_TIP = "Basic set of features for demonstration purposes in Windows using FIFOs (named pipes) and shared files.\n\
                     This PoC (Proof of Concept) still needs to be \"improved\" and \"un-extremed\"."
 

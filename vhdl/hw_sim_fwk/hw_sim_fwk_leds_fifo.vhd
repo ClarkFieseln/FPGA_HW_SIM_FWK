@@ -34,17 +34,17 @@ architecture arch of hw_sim_fwk_leds_fifo is
 begin
     GEN_LEDS:
     for I in 0 to (NR_LEDS - 1) generate
-        hw_sim_fwk_led_fifo_unit_x : entity work.hw_sim_fwk_led_fifo
-        generic map(
-            NR_LED              => I,
-            FIFO_PATH          => FIFO_PATH,
-            LED_FILE_NAME      => LEDS_FILE_NAME & integer'image(I),
-            PROTOCOL_LED       => PROTOCOL_LEDS
+        hw_sim_fwk_led_fifo_unit_x : entity work.hw_sim_fwk_fifo_write
+        generic map(            
+            NR_SIGOUT          => I,
+            SIGOUT_PATH        => FIFO_PATH,
+            SIGOUT_FILE_NAME   => LEDS_FILE_NAME & integer'image(I),
+            PROTOCOL_SIGOUT    => PROTOCOL_LEDS
         )  
         port map(
-            reset => reset_tm,
-            clock => clock_tm,
-            hw_led => hw_led_tm(I)
+            reset  => reset_tm,
+            clock  => clock_tm,
+            sigout => hw_led_tm(I)
         );
     end generate GEN_LEDS;
     -- connect cables

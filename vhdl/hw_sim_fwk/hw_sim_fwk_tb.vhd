@@ -124,6 +124,8 @@ begin
         
     -- instantiate hw digital inputs simulated externally
     -- ##################################################
+    -- NOTE: there is no hw_sim_fwk_fifo_read as clock is the only case this is needed.
+    --       For DIs we have already hw_sim_fwk_digital_inputs_fifo.
     g_instantiate_di_fifo : if USE_DI_FIFO = true generate
         hw_sim_fwk_digital_inputs_unit : entity hw_sim_fwk_digital_inputs_fifo
             generic map(
@@ -138,33 +140,33 @@ begin
                 hw_di     => di_tb
             );
     else generate
-        hw_sim_fwk_digital_inputs_unit : entity hw_sim_fwk_digital_inputs
-            generic map(
-                NR_DIS             => NR_DIS,
-                FILE_PATH          => FILE_PATH,
-                DIS_FILE_NAME      => DIS_FILE_NAME,
-                PROTOCOL_DIS       => PROTOCOL_DIS
+        hw_sim_fwk_digital_inputs_unit : entity hw_sim_fwk_file_read
+            generic map(              
+                NR_SIGSIN        => NR_DIS,
+                SIGSIN_PATH      => FILE_PATH,
+                SIGSIN_FILE_NAME => DIS_FILE_NAME,
+                PROTOCOL_SIGSIN  => PROTOCOL_DIS                
             )
             port map(
                 reset     => reset_tb,
                 clock     => hw_clock_tb,
-                hw_di     => di_tb
+                sigsin    => di_tb
             );
     end generate g_instantiate_di_fifo;
         
     -- instantiate hw switches simulated externally
     -- ############################################
-    hw_sim_fwk_switches_unit : entity hw_sim_fwk_switches
+    hw_sim_fwk_switches_unit : entity hw_sim_fwk_file_read
         generic map(
-            NR_SWITCHES        => NR_SWITCHES,
-            FILE_PATH          => FILE_PATH,
-            SWITCHES_FILE_NAME => SWITCHES_FILE_NAME,
-            PROTOCOL_SWITCHES  => PROTOCOL_SWITCHES
+            NR_SIGSIN        => NR_SWITCHES,
+            SIGSIN_PATH      => FILE_PATH,
+            SIGSIN_FILE_NAME => SWITCHES_FILE_NAME,
+            PROTOCOL_SIGSIN  => PROTOCOL_SWITCHES
         )
         port map(
             reset     => reset_tb,
             clock     => hw_clock_tb,
-            hw_switch => switch_tb
+            sigsin    => switch_tb
         );
 
     -- instantiate hw buttons, but button simulated in testbench
@@ -173,32 +175,34 @@ begin
     --       so we use a separate (and complementary) generate condition
     -- #######################################################################
     g_conditional_tb_button_simulation_1oo3 : if SIMULATE_BUTTON_IN_TESTBENCH = true generate
-        hw_sim_fwk_buttons_unit : entity hw_sim_fwk_buttons
+        hw_sim_fwk_buttons_unit : entity hw_sim_fwk_file_read
             generic map(
-                NR_BUTTONS        => NR_BUTTONS, FILE_PATH => FILE_PATH,
-                BUTTONS_FILE_NAME => BUTTONS_FILE_NAME,
-                PROTOCOL_BUTTONS  => PROTOCOL_BUTTONS
+                NR_SIGSIN        => NR_BUTTONS,
+                SIGSIN_PATH        => FILE_PATH,
+                SIGSIN_FILE_NAME => BUTTONS_FILE_NAME,
+                PROTOCOL_SIGSIN  => PROTOCOL_BUTTONS
             )
             port map(
                 reset     => reset_tb,
                 clock     => hw_clock_tb,
-                hw_button => button_tb_dummy -- simulate button in testbench               
+                sigsin    => button_tb_dummy -- simulate button in testbench               
             );
     end generate g_conditional_tb_button_simulation_1oo3;
 
     -- instantiate hw buttons simulated externally
     -- ###########################################
     g_conditional_tb_button_simulation_2oo3 : if SIMULATE_BUTTON_IN_TESTBENCH = false generate -- else generate
-        hw_sim_fwk_buttons_unit : entity hw_sim_fwk_buttons
+        hw_sim_fwk_buttons_unit : entity hw_sim_fwk_file_read
             generic map(
-                NR_BUTTONS        => NR_BUTTONS, FILE_PATH => FILE_PATH,
-                BUTTONS_FILE_NAME => BUTTONS_FILE_NAME,
-                PROTOCOL_BUTTONS  => PROTOCOL_BUTTONS
+                NR_SIGSIN        => NR_BUTTONS,
+                SIGSIN_PATH        => FILE_PATH,
+                SIGSIN_FILE_NAME => BUTTONS_FILE_NAME,
+                PROTOCOL_SIGSIN  => PROTOCOL_BUTTONS
             )
             port map(
                 reset     => reset_tb,
                 clock     => hw_clock_tb,
-                hw_button => button_tb  -- simulate button in external simulator               
+                sigsin    => button_tb  -- simulate button in external simulator               
             );
     end generate g_conditional_tb_button_simulation_2oo3;
 
@@ -218,6 +222,10 @@ begin
                 hw_led => led_tb
             );
     else generate
+        -- TODO: hw_sim_fwk_leds shall be implemented similar to
+        --       hw_sim_fwk_digital_outputs which in turn uses hw_sim_fwk_fifo_write.
+        --       As the alternative implementation hw_sim_fwk_leds_fifo is much faster
+        --       we may as well remove hw_sim_fwk_leds completely.
         hw_sim_fwk_leds_unit : entity hw_sim_fwk_leds
             generic map(
                 NR_LEDS            => NR_LEDS,

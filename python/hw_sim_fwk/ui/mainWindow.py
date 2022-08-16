@@ -47,6 +47,7 @@ USE_LED_FIFO = True # NOTE: this parameter is not in config.ini
 ######################################################################################
 
 # TODOs:
+# - create common base classes, e.g. for digital_outputs and leds_fifo
 # - add analog sensor (e.g. CPU load)
 # - plot signals
 # - add analog readings from file (reproducible tests!)

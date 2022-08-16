@@ -7,6 +7,15 @@ use ieee.std_logic_textio.all;
 library hw_sim_fwk;
 use hw_sim_fwk.hw_sim_fwk_common.all;
 
+
+-- ###########################################################################
+-- TODO: hw_sim_fwk_leds shall be implemented similar to
+--       hw_sim_fwk_digital_outputs which in turn uses hw_sim_fwk_fifo_write.
+--       As the alternative implementation hw_sim_fwk_leds_fifo is much faster
+--       we may as well remove hw_sim_fwk_leds completely.
+-- ###########################################################################
+        
+        
 -- synthesis translate_off
 -- ######################
 -- NOTE: add this module to hw_sim_fwk library in your project, and associate it only with Simulation.

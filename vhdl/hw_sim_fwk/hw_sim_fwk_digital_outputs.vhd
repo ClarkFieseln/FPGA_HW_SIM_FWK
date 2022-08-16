@@ -38,17 +38,17 @@ begin
 	--       Note that DIs are implemented by generating NR_DIS processes instead.
     GEN_DOS:
     for I in 0 to (NR_DOS - 1) generate
-        hw_sim_fwk_digital_output_unit_x : entity work.hw_sim_fwk_digital_output
+        hw_sim_fwk_digital_output_unit_x : entity work.hw_sim_fwk_fifo_write
         generic map(
-            NR_DO              => I,
-            FIFO_PATH          => FIFO_PATH,
-            DO_FILE_NAME       => DOS_FILE_NAME & integer'image(I),
-            PROTOCOL_DO        => PROTOCOL_DOS
+            NR_SIGOUT          => I,
+            SIGOUT_PATH        => FIFO_PATH,
+            SIGOUT_FILE_NAME   => DOS_FILE_NAME & integer'image(I),
+            PROTOCOL_SIGOUT    => PROTOCOL_DOS
         )  
         port map(
-            reset => reset_tm,
-            clock => clock_tm,
-            hw_do => hw_do_tm(I)
+            reset  => reset_tm,
+            clock  => clock_tm,
+            sigout => hw_do_tm(I)
         );
     end generate GEN_DOS;
     -- connect cables
