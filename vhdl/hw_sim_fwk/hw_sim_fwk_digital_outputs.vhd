@@ -26,7 +26,7 @@ entity hw_sim_fwk_digital_outputs is
 end hw_sim_fwk_digital_outputs;
 
 architecture arch of hw_sim_fwk_digital_outputs is
-    -- signals common to both modules
+    -- signals common to all modules
     signal clock_tm, reset_tm : std_logic;
     -- signals dio
     signal hw_do_tm           : std_logic_vector(NR_DOS - 1 downto 0);
@@ -43,7 +43,7 @@ begin
             NR_DO              => I,
             FIFO_PATH          => FIFO_PATH,
             DO_FILE_NAME       => DOS_FILE_NAME & integer'image(I),
-            PROTOCOL_DOS       => PROTOCOL_DOS
+            PROTOCOL_DO        => PROTOCOL_DOS
         )  
         port map(
             reset => reset_tm,
@@ -56,6 +56,7 @@ begin
     reset_tm <= reset_in;
     hw_do_tm <= hw_do_in;
 end arch;
+
 -- synthesis translate_on
 -- ######################
 

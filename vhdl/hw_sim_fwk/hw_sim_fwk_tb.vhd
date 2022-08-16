@@ -7,7 +7,6 @@ use ieee.std_logic_textio.all;
 use work.top_module;
 library hw_sim_fwk;
 use hw_sim_fwk.all;
-
 entity hw_sim_fwk_tb is
 end hw_sim_fwk_tb;
 
@@ -16,6 +15,7 @@ architecture arch of hw_sim_fwk_tb is
     -- ##########################
     -- hw_sim_fwk_tb
     constant USE_DI_FIFO                  : boolean := false; -- use only if all DIs are updated in every clock cycle
+    constant USE_LED_FIFO                 : boolean := true;
     constant SIMULATE_BUTTON_IN_TESTBENCH : boolean := false; -- otherwise button simulated externally
     constant PROTOCOL                     : boolean := false; -- to report details    
     constant FILE_PATH                    : string  := "C:/tmp/hw_sim_fwk/"; -- "/tmp/hw_sim_fwk/";
@@ -35,17 +35,16 @@ architecture arch of hw_sim_fwk_tb is
     -- constant CLOCK_PERIOD_EXTERNAL        : time    := 10000000 ns; -- 10 ms = 0.01 sec
     constant MAX_ELAPSED_CLOCK_PERIODS    : integer := (CLOCK_PERIOD_EXTERNAL / CLOCK_PERIOD) / 2;
     constant PROTOCOL_CLOCK               : boolean := false;
+    -- digital_inputs common
+    constant NR_DIS                       : integer := 10;
+    constant PROTOCOL_DIS                 : boolean := false;
     -- if USE_DI_FIFO = true
     -- hw_sim_fwk_digital_inputs_fifo
-    -- constant NR_DIS                       : integer := 10; 
-    -- constant DIS_FILE_NAME                : string := FIFO_PATH & "di_";
-    -- constant PROTOCOL_DIS                 : boolean := false;
+    constant DIS_FIFO_NAME                : string := FIFO_PATH & "di_";
     -- if USE_DI_FIFO = false
     -- hw_sim_fwk_digital_inputs
-    constant NR_DIS                       : integer := 10;
     constant DIS_FILE_NAME                : string  := FILE_PATH & "di_high";
-    constant PROTOCOL_DIS                 : boolean := false;
-    -- end generate g_use_di_fifo;
+    -- end condition USE_DI_FIFO
     -- hw_sim_fwk_switches
     constant NR_SWITCHES                  : integer := 10;
     constant SWITCHES_FILE_NAME           : string  := FILE_PATH & "switch_high";
@@ -54,11 +53,17 @@ architecture arch of hw_sim_fwk_tb is
     constant NR_BUTTONS                   : integer := 10;
     constant BUTTONS_FILE_NAME            : string  := FILE_PATH & "button_high";
     constant PROTOCOL_BUTTONS             : boolean := false;
-    -- hw_sim_fwk_leds
+    -- LEDS common
     constant NR_LEDS                      : integer := 10;
+    constant PROTOCOL_LEDS                : boolean := false;
+    -- if USE_LED_FIFO = true
+    -- hw_sim_fwk_leds
     constant LEDS_ON_FILE_NAME            : string  := FILE_PATH & "led_on";
     constant LEDS_OFF_FILE_NAME           : string  := FILE_PATH & "led_off";
-    constant PROTOCOL_LEDS                : boolean := false;
+    -- if USE_LED_FIFO = false
+    -- hw_sim_fwk_leds_fifo
+    constant LEDS_FILE_NAME               : string  := FIFO_PATH & "led_";
+    -- end condition USE_LED_FIFO
     -- hw_sim_fwk_digital_outputs
     constant NR_DOS                       : integer := 10;
     constant DOS_FILE_NAME                : string  := FIFO_PATH & "do_";
@@ -124,7 +129,7 @@ begin
             generic map(
                 NR_DIS             => NR_DIS,
                 FIFO_PATH          => FIFO_PATH,
-                DIS_FILE_NAME      => DIS_FILE_NAME,
+                DIS_FILE_NAME      => DIS_FIFO_NAME,
                 PROTOCOL_DIS       => PROTOCOL_DIS
             )
             port map(
@@ -199,19 +204,34 @@ begin
 
     -- instantiate hw leds simulated externally
     -- ########################################
-    hw_sim_fwk_leds_unit : entity hw_sim_fwk_leds
-        generic map(
-            NR_LEDS            => NR_LEDS,
-            FILE_PATH          => FILE_PATH,
-            LEDS_ON_FILE_NAME  => LEDS_ON_FILE_NAME,
-            LEDS_OFF_FILE_NAME => LEDS_OFF_FILE_NAME,
-            PROTOCOL_LEDS      => PROTOCOL_LEDS
-        )
-        port map(
-            reset  => reset_tb,
-            clock  => hw_clock_tb,
-            hw_led => led_tb
-        );
+    g_instantiate_leds_fifo : if USE_LED_FIFO = true generate
+        hw_sim_fwk_leds_unit : entity hw_sim_fwk_leds_fifo
+            generic map(
+                NR_LEDS            => NR_LEDS,
+                FIFO_PATH          => FIFO_PATH,
+                LEDS_FILE_NAME     => LEDS_FILE_NAME,
+                PROTOCOL_LEDS      => PROTOCOL_LEDS
+            )
+            port map(
+                reset  => reset_tb,
+                clock  => hw_clock_tb,
+                hw_led => led_tb
+            );
+    else generate
+        hw_sim_fwk_leds_unit : entity hw_sim_fwk_leds
+            generic map(
+                NR_LEDS            => NR_LEDS,
+                FILE_PATH          => FILE_PATH,
+                LEDS_ON_FILE_NAME  => LEDS_ON_FILE_NAME,
+                LEDS_OFF_FILE_NAME => LEDS_OFF_FILE_NAME,
+                PROTOCOL_LEDS      => PROTOCOL_LEDS
+            )
+            port map(
+                reset  => reset_tb,
+                clock  => hw_clock_tb,
+                hw_led => led_tb
+            );
+    end generate g_instantiate_leds_fifo;
     
     -- instantiate hw digital outputs simulated externally
     -- ###################################################

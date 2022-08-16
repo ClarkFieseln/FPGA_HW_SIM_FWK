@@ -15,7 +15,7 @@ entity hw_sim_fwk_digital_output is
         NR_DO              : integer := 2; -- current index of DO
         FIFO_PATH          : string  := "\\.\pipe\";
         DO_FILE_NAME       : string  := FIFO_PATH & "do_" & integer'image(NR_DO);
-        PROTOCOL_DOS       : boolean := false
+        PROTOCOL_DO        : boolean := false
     );
     port(
         reset   : in std_logic;
@@ -47,7 +47,7 @@ begin
         -- ##############
         if initialized = false then
             initialized := true;
-            if (PROTOCOL_DOS = true) then
+            if (PROTOCOL_DO = true) then
                 report "simulated HW DO "&integer'image(i)&" waiting to open for write on FIFO.";
             end if;
             -- The file, which is a FIFO (named pipe), is created by the external application.    
@@ -55,7 +55,7 @@ begin
                 file_open(open_status, o_file, DO_FILE_NAME,  write_mode);
                 exit when open_status = open_ok;
             end loop;
-            if (PROTOCOL_DOS = true) then
+            if (PROTOCOL_DO = true) then
                 report "simulated HW DO "&integer'image(i)&" opened for write on FIFO.";
             end if;
         -- asynchronous reset
@@ -69,7 +69,7 @@ begin
                     -- write ONE
                     do_level := '1';
                     write(o_file, '1'); -- "00000001");
-                    if (PROTOCOL_DOS = true) then
+                    if (PROTOCOL_DO = true) then
                         report "simulated HW DO "&integer'image(i)&" initialized to ON.";
                     end if;
                 -- NOTE: if hw_do is NOT 1 then we also initialize to OFF..also for X,U,..
@@ -77,7 +77,7 @@ begin
                     -- write ZERO
                     do_level := '0';
                     write(o_file, '0'); -- "00000000");
-                    if (PROTOCOL_DOS = true) then
+                    if (PROTOCOL_DO = true) then
                         report "simulated HW DO "&integer'image(i)&" initialized to OFF.";
                     end if;
                 end if;
@@ -91,7 +91,7 @@ begin
                 do_level := '1';
                 write(o_file, '1'); -- "00000001");
                 flush(o_file);
-                if (PROTOCOL_DOS = true) then
+                if (PROTOCOL_DO = true) then
                     report "simulated HW DO "&integer'image(i)&" rising edge!";
                 end if;
             elsif do_level /= '0' and hw_do = '0' then
@@ -99,7 +99,7 @@ begin
                 do_level := '0';
                 write(o_file, '0'); -- "00000000");
                 flush(o_file);
-                if (PROTOCOL_DOS = true) then
+                if (PROTOCOL_DO = true) then
                     report "simulated HW DO "&integer'image(i)&" falling edge!";
                 end if;
             end if;

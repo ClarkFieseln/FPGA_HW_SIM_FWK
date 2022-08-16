@@ -15,9 +15,6 @@ import tkinter
 root = tkinter.Tk()
 root.withdraw()
 
-# NOTE: using a FIFO to pass data from Python-App to VHDL-Code means that the complete VHDL simulation (in VIVADO) is
-#       "blocked" waiting to receive this data, even if called in a separate "concurrent" (?) process.
-#       Therefore, using a FIFO is recommended only in cases where all DIs are updated in every clock cycle.
 FILE_NAME_DO = []
 DO_PERIOD_SEC = None
 # NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
@@ -101,6 +98,7 @@ class digital_outputs:
             self.__lock_r_do[i].acquire()
             self.__FIFO_R_DO_HIGH[i] = temp_line_int
             self.__lock_r_do[i].release()
+        logging.info("Thread %s: finished!", name)
 
     def do_do(self):
         for i in range(configuration.NR_DOS):

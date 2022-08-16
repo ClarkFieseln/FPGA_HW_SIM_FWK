@@ -156,6 +156,6 @@ class switches:
                 # NOTE: if required, use evt_set_switch_on_or_off[] to avoid polling
                 #       self.__event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0] / 2)
                 self.evt_set_switch_on_or_off[i].wait()
-
+        logging.info("Thread %s(%s): finished!", name, str(i))
 
 

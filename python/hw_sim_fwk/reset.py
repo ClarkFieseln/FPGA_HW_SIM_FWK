@@ -84,6 +84,6 @@ class reset:
                     f.close()
                 logging.info("Reset set to HIGH")
                 self.__event.evt_set_reset_low.wait()
-
+        logging.info("Thread %s: finished!", name)
 
 

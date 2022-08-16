@@ -63,18 +63,17 @@ class scheduler:
         log_buff = ""
         info_buff = ""
 
-    def __init__(self, event, CLOCK_PERIOD_SEC_ARG, csv_log, reset, leds, switches, digital_inputs,\
-                                   digital_outputs, buttons):
+    def __init__(self, event, CLOCK_PERIOD_SEC_ARG, csv_log, ref):
         logging.info('init scheduler')
         self.__event = event
         self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
         self.csv_log = csv_log
-        self.reset = reset
-        self.leds = leds
-        self.switches = switches
-        self.digital_inputs = digital_inputs
-        self.digital_outputs = digital_outputs
-        self.buttons = buttons
+        self.reset = ref.reset
+        self.leds = ref.leds
+        self.switches = ref.switches
+        self.digital_inputs = ref.digital_inputs
+        self.digital_outputs = ref.digital_outputs
+        self.buttons = ref.buttons
         self.updateGuiDefs()
         scheduler_thread = threading.Thread(name="scheduler_thread", target=self.thread_scheduler, args=("scheduler_thread",))
         scheduler_thread.start()
@@ -198,7 +197,7 @@ class scheduler:
                             #       but at a lower pace as expected/desired.
                 self.__event.evt_clock.wait()
                 self.__event.evt_clock.clear()
-
+        logging.info("Thread %s finished!", name)
 
 
 

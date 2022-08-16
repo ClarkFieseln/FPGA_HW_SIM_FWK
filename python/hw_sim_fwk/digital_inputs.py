@@ -12,6 +12,8 @@ from threading import Lock
 
 
 
+USE_DI_FIFO = False # NOTE: this parameter is not in config.ini
+
 # NOTE: we need root so we can close the messagebox
 root = tkinter.Tk()
 root.withdraw()
@@ -123,6 +125,7 @@ class digital_inputs:
         logging.info("Thread %s: starting", name)
         # open FIFO for writing
         self.__fifo_w_di[i] = create_w_fifo(FILE_NAME_DI[i])
+        logging.info("Thread %s: finished!", name)
 
     # Simulate asynchronous DIs changing faster than DI period "expected" by receiver.
     # Alternatively, toggle_di may just toggle bits,
@@ -200,6 +203,7 @@ class digital_inputs:
             # wait random time within defined limits
             # evt_wake_up.wait(random.uniform(self.CLOCK_PERIOD_SEC[0], DI_PERIOD_SEC))
             ######################################
+        logging.info("Thread %s: finished!", name)
 
     # TODO: investigate if it is possible to set DIs faster.
     #       Why does it take 1ms to rename/remove a file in Win11 ?

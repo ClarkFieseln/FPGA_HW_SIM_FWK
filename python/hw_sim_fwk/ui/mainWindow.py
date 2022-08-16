@@ -27,12 +27,15 @@ from clock import clock
 from digital_inputs import digital_inputs
 from digital_outputs import digital_outputs
 from leds import leds
+from leds_fifo import leds_fifo
 from reset import reset
 from switches import switches
 from buttons import buttons
 from scheduler import scheduler
 
 
+
+USE_LED_FIFO = True # NOTE: this parameter is not in config.ini
 
 # NOTE: minimize application windows when not needed in order to increase performance.
 #       Intensive work on wave output on the simulator may also affect performance.
@@ -123,13 +126,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     switches = None
     buttons = None
     scheduler = None
+    # references to specific peripheral and app objects to be passed to scheduler as a single parameter
+    class ref_scheduler():
+        clock = None
+        digital_inputs = None
+        digital_outputs = None
+        leds = None
+        reset = None
+        switches = None
+        buttons = None
+    # object/instance
+    ref_scheduler = ref_scheduler()
     # widgets:
     pbKeepPbPressed = None
-    button = []
-    switch = []
-    led = []
-    di = []
-    do = []
+    button_wdg = []
+    switch_wdg = []
+    led_wdg = []
+    di_wdg = []
+    do_wdg = []
 
     # information message in terminal
     logging.info("INFO: start the VHDL tool if not yet started..GUI will then show up!")
@@ -152,6 +166,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             while event.evt_close_app.is_set() == False:
                 event.evt_wake_up.wait(1 / configuration.GUI_UPDATE_PERIOD_IN_HZ)
                 self.updated.emit("Hi")
+            logging.info("left MyGuiUpdateThread:run()!")
 
     # thread to update GUI
     ######################
@@ -176,19 +191,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     event.evt_gui_led_update.clear()
                     for i in range(configuration.NR_LEDS):
                         if self.leds.LED_ON[i] == 1:
-                            self.led[i].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_on.png'))
+                            self.led_wdg[i].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_on.png'))
                         else:
-                            self.led[i].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_off.png'))
+                            self.led_wdg[i].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_off.png'))
                 # digital inputs
                 if event.evt_gui_di_update.is_set():
                     event.evt_gui_di_update.clear()
                     for i in range(configuration.NR_DIS):
-                        self.di[i].setText(str(self.digital_inputs.DI_HIGH[i]))
+                        self.di_wdg[i].setText(str(self.digital_inputs.DI_HIGH[i]))
                 # digital outputs
                 if event.evt_gui_do_update.is_set():
                     event.evt_gui_do_update.clear()
                     for i in range(configuration.NR_DOS):
-                        self.do[i].setText(str(self.digital_outputs.DO_HIGH[i]))
+                        self.do_wdg[i].setText(str(self.digital_outputs.DO_HIGH[i]))
                 # update remaining time when running for time
                 if event.evt_gui_remain_run_time_update.is_set():
                     event.evt_gui_remain_run_time_update.clear()
@@ -238,15 +253,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.init_csv_log()
         # instantiate peripheral and app objects
         ########################################
-        self.clock = clock(event, self.CLOCK_PERIOD_SEC) # self.CLOCK_PERIOD_SEC is set within this call
+        self.clock = clock(event, self.CLOCK_PERIOD_SEC) # NOTE: self.CLOCK_PERIOD_SEC is set within this call
         self.reset = reset(event)
-        self.leds = leds(event, self.CLOCK_PERIOD_SEC)
+        if USE_LED_FIFO == True:
+            self.leds = leds_fifo(event, self.CLOCK_PERIOD_SEC)
+        else:
+            self.leds = leds(event, self.CLOCK_PERIOD_SEC)
         self.switches = switches(event, self.CLOCK_PERIOD_SEC)
         self.digital_inputs = digital_inputs(event, self.CLOCK_PERIOD_SEC)
         self.digital_outputs = digital_outputs(event, self.CLOCK_PERIOD_SEC)
         self.buttons = buttons(event, self.CLOCK_PERIOD_SEC)
-        self.scheduler = scheduler(event, self.CLOCK_PERIOD_SEC, self.csv_log, self.reset, self.leds, self.switches, self.digital_inputs,\
-                                   self.digital_outputs, self.buttons)
+        # fill "after" objects have been created
+        self.ref_scheduler.clock = self.clock
+        self.ref_scheduler.digital_inputs = self.digital_inputs
+        self.ref_scheduler.digital_outputs = self.digital_outputs
+        self.ref_scheduler.leds = self.leds
+        self.ref_scheduler.reset = self.reset
+        self.ref_scheduler.switches = self.switches
+        self.ref_scheduler.buttons = self.buttons
+        # instantiate scheculer
+        self.scheduler = scheduler(event, self.CLOCK_PERIOD_SEC, self.csv_log, self.ref_scheduler)
         # setup Ui
         self.setupUi(self)
         # further Ui setup
@@ -381,11 +407,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setObjectName("di_lbl_" + str(i))
             label.setText("" + str(i))
             # di label for value
-            self.di.append(QtWidgets.QLabel(self.tab_fpga))
-            self.di[i].setGeometry(QtCore.QRect(577 - i * 2 * 12 - (i / 4) * 3, 515, 58, 16))
-            self.di[i].setStyleSheet("color: rgb(0, 0, 0);")
-            self.di[i].setObjectName("di_" + str(i))
-            self.di[i].setText(str(self.digital_inputs.DI_HIGH[i]))
+            self.di_wdg.append(QtWidgets.QLabel(self.tab_fpga))
+            self.di_wdg[i].setGeometry(QtCore.QRect(577 - i * 2 * 12 - (i / 4) * 3, 515, 58, 16))
+            self.di_wdg[i].setStyleSheet("color: rgb(0, 0, 0);")
+            self.di_wdg[i].setObjectName("di_" + str(i))
+            self.di_wdg[i].setText(str(self.digital_inputs.DI_HIGH[i]))
         # digital outputs
         for i in range(configuration.NR_DIS):
             # do label
@@ -395,33 +421,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             label.setObjectName("do_" + str(i))
             label.setText("" + str(i))
             # do label for value
-            self.do.append(QtWidgets.QLabel(self.tab_fpga))
-            self.do[i].setGeometry(QtCore.QRect(977 - i * 2 * 12 - (i / 4) * 3, 515, 58, 16))
-            self.do[i].setStyleSheet("color: rgb(0, 0, 0);")
-            self.do[i].setObjectName("do_" + str(i))
-            self.do[i].setText(str(self.digital_outputs.DO_HIGH[i]))
+            self.do_wdg.append(QtWidgets.QLabel(self.tab_fpga))
+            self.do_wdg[i].setGeometry(QtCore.QRect(977 - i * 2 * 12 - (i / 4) * 3, 515, 58, 16))
+            self.do_wdg[i].setStyleSheet("color: rgb(0, 0, 0);")
+            self.do_wdg[i].setObjectName("do_" + str(i))
+            self.do_wdg[i].setText(str(self.digital_outputs.DO_HIGH[i]))
         # buttons
         icon_button = QtGui.QIcon()
         icon_button.addPixmap(QtGui.QPixmap(":/btn_up/btn_up.png"), QtGui.QIcon.Selected, QtGui.QIcon.Off)
         icon_button.addPixmap(QtGui.QPixmap(":/btn_down/btn_down.png"), QtGui.QIcon.Selected, QtGui.QIcon.On)
         for i in range(configuration.NR_BUTTONS):
             # button widget
-            self.button.append(QtWidgets.QPushButton(self.tab_fpga))
-            self.button[i].setGeometry(QtCore.QRect(225, 190 + i * 2 * 15, 31, 21))
-            self.button[i].setText("")
-            self.button[i].setIcon(icon_button)
-            self.button[i].setIconSize(QtCore.QSize(33, 21))
-            self.button[i].setAutoDefault(False)
-            self.button[i].setDefault(False)
-            self.button[i].setFlat(True)
-            self.button[i].setAutoFillBackground(False)
-            self.button[i].setObjectName("button_" + str(i))
-            self.button[i].clicked.connect(lambda checked, arg=i: self.on_button_clicked(arg))
-            self.button[i].pressed.connect(functools.partial(self.on_button_pressed, i))
-            self.button[i].released.connect(functools.partial(self.on_button_released, i))
+            self.button_wdg.append(QtWidgets.QPushButton(self.tab_fpga))
+            self.button_wdg[i].setGeometry(QtCore.QRect(225, 190 + i * 2 * 15, 31, 21))
+            self.button_wdg[i].setText("")
+            self.button_wdg[i].setIcon(icon_button)
+            self.button_wdg[i].setIconSize(QtCore.QSize(33, 21))
+            self.button_wdg[i].setAutoDefault(False)
+            self.button_wdg[i].setDefault(False)
+            self.button_wdg[i].setFlat(True)
+            self.button_wdg[i].setAutoFillBackground(False)
+            self.button_wdg[i].setObjectName("button_" + str(i))
+            self.button_wdg[i].clicked.connect(lambda checked, arg=i: self.on_button_clicked(arg))
+            self.button_wdg[i].pressed.connect(functools.partial(self.on_button_pressed, i))
+            self.button_wdg[i].released.connect(functools.partial(self.on_button_released, i))
             # button enabled?
             if configuration.BUTTON_TOGGLE_AUTO == True:
-                self.button[i].setEnabled(False)
+                self.button_wdg[i].setEnabled(False)
             # button label
             label = QtWidgets.QLabel(self.tab_fpga)
             label.setGeometry(QtCore.QRect(270, 192 + i * 2 * 15, 58, 16))
@@ -434,17 +460,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         icon_sw.addPixmap(QtGui.QPixmap(":/switch_right/sw_right.png"), QtGui.QIcon.Selected, QtGui.QIcon.On)
         for i in range(configuration.NR_SWITCHES):
             # switch widget
-            self.switch.append(QtWidgets.QPushButton(self.tab_fpga))
-            self.switch[i].setGeometry(QtCore.QRect(337, 190 + i * 2 * 15, 37, 17))
-            self.switch[i].setText("")
-            self.switch[i].setIcon(icon_sw)
-            self.switch[i].setIconSize(QtCore.QSize(37, 17))
-            self.switch[i].setFlat(True)
-            self.switch[i].setObjectName("switch_" + str(i))
-            self.switch[i].clicked.connect(lambda checked, arg=i: self.on_switch_clicked(arg))
+            self.switch_wdg.append(QtWidgets.QPushButton(self.tab_fpga))
+            self.switch_wdg[i].setGeometry(QtCore.QRect(337, 190 + i * 2 * 15, 37, 17))
+            self.switch_wdg[i].setText("")
+            self.switch_wdg[i].setIcon(icon_sw)
+            self.switch_wdg[i].setIconSize(QtCore.QSize(37, 17))
+            self.switch_wdg[i].setFlat(True)
+            self.switch_wdg[i].setObjectName("switch_" + str(i))
+            self.switch_wdg[i].clicked.connect(lambda checked, arg=i: self.on_switch_clicked(arg))
             # switch enabled?
             if configuration.SWITCH_TOGGLE_AUTO == True:
-                self.switch[i].setEnabled(False)
+                self.switch_wdg[i].setEnabled(False)
             # switch label
             label = QtWidgets.QLabel(self.tab_fpga)
             label.setGeometry(QtCore.QRect(387, 190 + i * 2 * 15, 41, 16))
@@ -457,14 +483,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         icon_led.addPixmap(QtGui.QPixmap(":/led_on/led_on.png"), QtGui.QIcon.Selected, QtGui.QIcon.On)
         for i in range(configuration.NR_LEDS):
             # LED widget
-            self.led.append(QtWidgets.QPushButton(self.tab_fpga))
-            self.led[i].setGeometry(QtCore.QRect(900, 190 + i * 2 * 15, 31, 16))
-            self.led[i].setStyleSheet("")
-            self.led[i].setText("")
-            self.led[i].setIcon(icon_led)
-            self.led[i].setIconSize(QtCore.QSize(25, 11))
-            self.led[i].setFlat(True)
-            self.led[i].setObjectName("led " + str(i))
+            self.led_wdg.append(QtWidgets.QPushButton(self.tab_fpga))
+            self.led_wdg[i].setGeometry(QtCore.QRect(900, 190 + i * 2 * 15, 31, 16))
+            self.led_wdg[i].setStyleSheet("")
+            self.led_wdg[i].setText("")
+            self.led_wdg[i].setIcon(icon_led)
+            self.led_wdg[i].setIconSize(QtCore.QSize(25, 11))
+            self.led_wdg[i].setFlat(True)
+            self.led_wdg[i].setObjectName("led " + str(i))
             # LED label
             label = QtWidgets.QLabel(self.tab_fpga)
             label.setGeometry(QtCore.QRect(940, 190 + i * 2 * 15, 31, 16))
@@ -548,11 +574,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.buttons.evt_set_button_on[idx].is_set() == True:
                 self.buttons.evt_set_button_on[idx].clear()
                 self.buttons.evt_set_button_off[idx].set()
-                self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_up.png'))
+                self.button_wdg[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_up.png'))
             else:
                 self.buttons.evt_set_button_off[idx].clear()
                 self.buttons.evt_set_button_on[idx].set()
-                self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
+                self.button_wdg[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
 
     def on_button_pressed(self, idx):
         if configuration.KEEP_PB_PRESSED == False:
@@ -561,7 +587,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 buttonSoundThread.start()
             self.buttons.evt_set_button_off[idx].clear()
             self.buttons.evt_set_button_on[idx].set()
-            self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
+            self.button_wdg[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_down.png'))
 
     def on_button_released(self, idx):
         if configuration.KEEP_PB_PRESSED == False:
@@ -570,7 +596,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 buttonSoundThread.start()
             self.buttons.evt_set_button_on[idx].clear()
             self.buttons.evt_set_button_off[idx].set()
-            self.button[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_up.png'))
+            self.button_wdg[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/btn_up.png'))
 
     def on_switch_clicked(self, idx):
         if configuration.SOUND_EFFECTS:
@@ -579,17 +605,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if self.switches.evt_set_switch_on[idx].is_set() == True:
             self.switches.evt_set_switch_on[idx].clear()
             self.switches.evt_set_switch_off[idx].set()
-            self.switch[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/sw_left.png'))
+            self.switch_wdg[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/sw_left.png'))
         else:
             self.switches.evt_set_switch_off[idx].clear()
             self.switches.evt_set_switch_on[idx].set()
-            self.switch[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/sw_right.png'))
+            self.switch_wdg[idx].setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/sw_right.png'))
 
     def thread_powerSound(self):
         playsound(configuration.PATH_PREFIX + 'sounds/power_on_off.mp3')
 
     @pyqtSlot()
-    def closeEvent(self,event):
+    def closeEvent(self,event_arg):
         if configuration.TEST:
             logging.info("printing log_buff:")
             logging.info(self.scheduler.log_buff)
@@ -597,7 +623,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             logging.info(self.scheduler.info_buff)
         event.evt_close_app.set()
         logging.info("mainWindow closed!")
+        # TODO: check this, not closing nicely..
+        #       need probably to first unbound FIFOs, exit threads in specific order, etc.?
         self.close()
+        # self.parent.close()
+        # exit(0)
+        # self._thread.terminate() # quit()
 
     @pyqtSlot(bool)
     def on_pbOnOff_toggled(self, checked):

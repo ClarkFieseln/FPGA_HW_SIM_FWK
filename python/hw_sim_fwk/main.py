@@ -49,6 +49,7 @@ def initConfig():
     logging.info("set logging level to " + configuration.LOGGING_LEVEL)
 
 def main():
+    logging.info("entering main()..")
     initConfig()
     app = QApplication(sys.argv)
     app.setStyleSheet('QMainWindow{border-color: darkgray;border: 1px solid black;}')
@@ -62,10 +63,12 @@ def main():
     ui.plotThread()
     # NOTE: because of the previous call to ui.plotThread() this point is actually never reached
     sys.exit(app.exec_())
+    logging.info("leaving main()..")
 
 # call main()
 if __name__=="__main__":
    main()
+   logging.info("main() left!")
 
     
 

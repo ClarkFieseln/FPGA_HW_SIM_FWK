@@ -76,5 +76,6 @@ class clock:
             self.__event.evt_clock.set()
             # wait half clock period
             self.__event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0]/2)
+        logging.info("Thread %s: finished!", name)
 
 

@@ -147,6 +147,6 @@ class buttons:
                     f.close()
                 logging.info("Button (" + str(i) + ") = HIGH")
                 self.evt_set_button_off[i].wait()
-
+        logging.info("Thread %s(%s): finished!", name, str(i))
 
 
