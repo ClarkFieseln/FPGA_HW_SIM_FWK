@@ -78,6 +78,9 @@ class InitApp(object):
                 if "SHOW_PLOT" in self.config["myConfig"]:
                     configuration.SHOW_PLOT = self.config.getboolean('myConfig','SHOW_PLOT')
                     logging.info("SHOW_PLOT = " + str(configuration.SHOW_PLOT))
+                if "TEST" in self.config["myConfig"]:
+                    configuration.TEST = self.config.getboolean('myConfig','TEST')
+                    logging.info("TEST = " + str(configuration.TEST))
                 if "TEXT_BOLD" in self.config["myConfig"]:
                     configuration.TEXT_BOLD = self.config.getboolean('myConfig','TEXT_BOLD')
                     logging.info("TEXT_BOLD = " + str(configuration.TEXT_BOLD))
@@ -205,6 +208,7 @@ class InitApp(object):
         self.config['myConfig']['GUI_UPDATE_PERIOD_IN_HZ'] = str(configuration.GUI_UPDATE_PERIOD_IN_HZ)
         self.config['myConfig']['SHOW_LIVE_STATUS'] = str(configuration.SHOW_LIVE_STATUS)
         self.config['myConfig']['SHOW_PLOT'] = str(configuration.SHOW_PLOT)
+        self.config['myConfig']['TEST'] = str(configuration.TEST)
         self.config['myConfig']['SHOW_PERFORMANCE'] = str(configuration.SHOW_PERFORMANCE)
         self.config['myConfig']['TEXT_BOLD'] = str(configuration.TEXT_BOLD)
         self.config['myConfig']['TEXT_SIZE'] = str(configuration.TEXT_SIZE)

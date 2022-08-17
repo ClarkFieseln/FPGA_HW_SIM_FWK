@@ -308,6 +308,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.lblVersion.setToolTip(configuration.VERSION_TOOL_TIP)
         self.cbPlotShow.setChecked(configuration.SHOW_PLOT)
         self.cbSoundOn.setChecked(configuration.SOUND_EFFECTS)
+        self.cbTest.setToolTip("execute test code, e.g. to measure performance.\nTest results will be logged to console after closing the window.")
+        self.cbTest.setChecked(configuration.TEST)
         self.cbShowLiveStatus.setChecked(configuration.SHOW_LIVE_STATUS)
         self.cbLoggingOn.setChecked(configuration.LOG_TO_CSV)
         self.leMinClockPeriodMs.setText(str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS))
@@ -621,11 +623,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     @pyqtSlot()
     def closeEvent(self,event_arg):
-        if configuration.TEST:
+        if configuration.TEST or self.scheduler.test.log_buff != "" or self.scheduler.test.info_buff != "":
             logging.info("printing log_buff:")
-            logging.info(self.scheduler.log_buff)
+            logging.info(self.scheduler.test.log_buff)
             logging.info("printing info_buff:")
-            logging.info(self.scheduler.info_buff)
+            logging.info(self.scheduler.test.info_buff)
         event.evt_close_app.set()
         logging.info("mainWindow closed!")
         # TODO: check this, not closing nicely..
@@ -886,6 +888,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             configuration.SHOW_PLOT = True
             self.on_cbPlotShow_clicked()
         root.update()
+
+    @pyqtSlot()
+    def on_cbTest_clicked(self):
+        configuration.TEST = not configuration.TEST
+        self.cbTest.setChecked(configuration.TEST)
 
     @pyqtSlot()
     def on_pbSettingsSave_clicked(self):

@@ -53,11 +53,14 @@ class scheduler:
     buttons = None
     # FIFO for clock
     fifo_w_clock = None # create_w_fifo(FILE_NAME_CLOCK)
-    freq = 0
-    prev_time = 0
-    nr_cycles = 0
-    log_buff = ""
-    info_buff = ""
+    class test():
+        freq = 0
+        prev_time = 0
+        nr_cycles = 0
+        log_buff = ""
+        info_buff = ""
+        start_time = 0
+    test = test()
 
     def __init__(self, event, CLOCK_PERIOD_SEC_ARG, csv_log, ref):
         logging.info('init scheduler')
@@ -98,7 +101,7 @@ class scheduler:
         while self.__event.evt_close_app.is_set() == False:
             # time measurement
             if configuration.TEST:
-                start_time = time.time()
+                self.start_time = time.time()
             # device on?
             if self.__event.evt_set_power_on.is_set() == True:
                 # toggle signal
@@ -149,7 +152,7 @@ class scheduler:
                     #########################
                     clock_periods = clock_periods + 1
                     if configuration.TEST:
-                        self.nr_cycles = self.nr_cycles + 1
+                        self.test.nr_cycles = self.test.nr_cycles + 1
                 # log to csv
                 ############
                 if configuration.LOG_TO_CSV == True:
@@ -162,13 +165,13 @@ class scheduler:
             if (self.__event.evt_pause.is_set()) == True:
                 self.__event.evt_resume.wait()
                 if configuration.TEST:
-                    self.prev_time = start_time
+                    self.test.prev_time = self.start_time
             elif (self.__event.evt_step_on.is_set() == True):
                 if self.clock_high == False:
                     while self.__event.evt_step_on.is_set() == True and self.__event.evt_do_step.is_set() == False:
                         self.__event.evt_do_step.wait(self.CLOCK_PERIOD_SEC[0] / 2)
                     if configuration.TEST:
-                        self.prev_time = start_time
+                        self.test.prev_time = self.start_time
                 else:
                     self.__event.evt_do_step.clear()  # step done!
                     self.__event.evt_clock.wait()
@@ -176,14 +179,14 @@ class scheduler:
             else:
                 if configuration.TEST:
                     end_time = time.time()
-                    tdiff = start_time - self.prev_time
-                    self.prev_time = start_time
+                    tdiff = self.start_time - self.test.prev_time
+                    self.test.prev_time = self.start_time
                     if tdiff != 0:
-                        self.freq = 0.5/(tdiff)
-                        # self.log_buff += str(self.freq) + "\r\n"
-                        self.log_buff += str(self.freq) + "," + str(self.nr_cycles) + "\r\n"
-                        tdiff_sched = end_time - start_time
-                        self.info_buff += str(tdiff_sched) + "\r\n"
+                        self.test.freq = 0.5/(tdiff)
+                        # self.test.log_buff += str(self.test.freq) + "\r\n"
+                        self.test.log_buff += str(self.test.freq) + "," + str(self.test.nr_cycles) + "\r\n"
+                        tdiff_sched = end_time - self.start_time
+                        self.test.info_buff += str(tdiff_sched) + "\r\n"
                         # NOTE: uncomment next code to see warning..
                         # WARNING: logging this warning too often may worsen the problem
                         # if tdiff_sched > (self.CLOCK_PERIOD_SEC[0]/2):

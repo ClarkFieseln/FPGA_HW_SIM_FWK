@@ -8,7 +8,8 @@ VERSION_TOOL_TIP = "Basic set of features for demonstration purposes in Windows 
                     This PoC (Proof of Concept) still needs to be \"improved\" and \"un-extremed\"."
 
 # execute test code, e.g. to measure performance
-TEST = False
+# test results will be logged to console after "closing" the window
+TEST = True
 
 # LOGGING_LEVEL specifies the lowest-severity log message a logger will handle, where debug is the lowest built-in severity level and critical is the highest built-in severity.
 # For example, if the severity level is INFO, the logger will handle only INFO, WARNING, ERROR, and CRITICAL messages and will ignore DEBUG messages.
