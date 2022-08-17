@@ -16,7 +16,6 @@ root = tkinter.Tk()
 root.withdraw()
 
 FILE_NAME_DO = []
-DO_PERIOD_SEC = None
 # NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
 #       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
 evt_wake_up = oclock.Event()
@@ -25,25 +24,23 @@ evt_wake_up = oclock.Event()
 
 class digital_outputs:
 ######################
-    CLOCK_PERIOD_SEC = None
     __event = None
     # TODO: implement getter/setter for DO_HIGH[]
     DO_HIGH = [] # value set "synchronously" with "asynchronous" variable in __FIFO_R_DO_HIGH[]
     __FIFO_R_DO_HIGH = [] # value read from FIFO (named pipe), set by VHDL code
-    for i in range(configuration.NR_DOS):
-        DO_HIGH.append(0)
-        __FIFO_R_DO_HIGH.append(0)
     __fifo_r_do = []
     __lock_r_do = [] # lock to access __FIFO_R_DO_HIGH[]
-    # fill with None or 0 for now...initialization in threads instead.
-    for i in range(configuration.NR_DOS):
-        __fifo_r_do.append(0) # open(FILE_NAME_DO[i], 'r'))
-        __lock_r_do.append(Lock())
 
-    def __init__(self, event, CLOCK_PERIOD_SEC_ARG):
+    def __init__(self, event):
         logging.info('init digital_outputs')
         self.__event = event
-        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
+        for i in range(configuration.NR_DOS):
+            self.DO_HIGH.append(0)
+            self.__FIFO_R_DO_HIGH.append(0)
+        # fill with None or 0 for now...initialization in threads instead.
+        for i in range(configuration.NR_DOS):
+            self.__fifo_r_do.append(0)  # open(FILE_NAME_DO[i], 'r'))
+            self.__lock_r_do.append(Lock())
         self.updateGuiDefs()
         self.__updateMemberVariables()
         for i in range(configuration.NR_DOS):
@@ -53,7 +50,6 @@ class digital_outputs:
 
     def updateGuiDefs(self):
         global FILE_NAME_DO
-        global DO_PERIOD_SEC
         if configuration.NR_DOS > configuration.MAX_NR_DO:
             configuration.NR_DOS = configuration.MAX_NR_DO
             logging.warning("maximum nr. of digital outputs limited to " + str(configuration.MAX_NR_DO))
@@ -64,12 +60,6 @@ class digital_outputs:
         FILE_NAME_DO = []
         for i in range(configuration.NR_DOS):
             FILE_NAME_DO.append(FILE_NAME_DO_PART + str(i))
-        # digital output period
-        # ASSUMPTION: in worst case the DOs are switched in every edge of the clock (both rising and falling edges)
-        #             under consideration of jitter we need to be faster than that when polling possible changes,
-        #             thus we define the period to be 1/4th of the clock period.
-        DO_PERIOD_SEC = self.CLOCK_PERIOD_SEC[0] / 4
-        logging.info("DO_PERIOD_SEC = " + str(DO_PERIOD_SEC))
 
     def __thread_fifo_r_do(self, name, i):
         logging.info("Thread %s: starting", name)
@@ -128,6 +118,8 @@ class digital_outputs:
         self.__event.evt_gui_do_update.set()
 
     # TODO: need to update threads as well?
+    #       need to call this method in on_cbNrDos_currentIndexChanged() in main Window?
+    #       or just remove this function and rely on restart of app for config changes to take effect?
     def __updateMemberVariables(self):
         self.DO_HIGH = []
         for i in range(configuration.NR_DOS):

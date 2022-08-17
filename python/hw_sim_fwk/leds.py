@@ -6,39 +6,39 @@ import os
 
 
 
+####################################################################################################################
+# TODO: improve do_led()
+# taking as example __set_one()/__set_zero() in digital_inputs.do_di_count() we shall also use separate threads here
+# in order not to block when doing file-handling sequentially.
+# Because we will probably never use this module again anyways the solution may be to just remove this module!
+####################################################################################################################
+
 # NOTE: we need root so we can close the messagebox
 root = tkinter.Tk()
 root.withdraw()
 
 FILE_NAME_LED_ON = []
 FILE_NAME_LED_OFF = []
-LED_PERIOD_SEC = None
-# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
-#       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = oclock.Event()
 
 
 
 class leds:
 ###########
-    CLOCK_PERIOD_SEC = None
     __event = None
     # TODO: implement getter/setter for LED_ON[]
     LED_ON = []
-    for i in range(configuration.NR_LEDS):
-        LED_ON.append(0)
 
-    def __init__(self, event, CLOCK_PERIOD_SEC_ARG):
+    def __init__(self, event):
         logging.info('init leds')
         self.__event = event
-        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
+        for i in range(configuration.NR_LEDS):
+            self.LED_ON.append(0)
         self.updateGuiDefs()
         self.__updateMemberVariables()
 
     def updateGuiDefs(self):
         global FILE_NAME_LED_ON
         global FILE_NAME_LED_OFF
-        global LED_PERIOD_SEC
         if configuration.NR_LEDS > configuration.MAX_NR_LED:
             configuration.NR_LEDS = configuration.MAX_NR_LED
             logging.warning("maximum nr. of LEDs limited to " + str(configuration.MAX_NR_LED))
@@ -49,12 +49,6 @@ class leds:
         for i in range(configuration.NR_LEDS):
             FILE_NAME_LED_ON.append(FILE_NAME_LED_ON_PART + str(i))
             FILE_NAME_LED_OFF.append(FILE_NAME_LED_OFF_PART + str(i))
-        # LED period
-        # ASSUMPTION: in worst case the LEDs are switched in every edge of the clock (both rising and falling edges)
-        #             under consideration of jitter we need to be faster than that when polling possible changes,
-        #             thus we define the period to be 1/4th of the clock period.
-        LED_PERIOD_SEC = self.CLOCK_PERIOD_SEC[0] / 4
-        logging.info("LED_PERIOD_SEC = " + str(LED_PERIOD_SEC))
 
     def createTempFiles(self):
         for i in range(configuration.NR_LEDS):

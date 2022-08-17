@@ -15,9 +15,6 @@ root.withdraw()
 FILE_NAME_SW_HIGH = []
 FILE_NAME_SW_LOW = []
 SWITCH_PERIOD_SEC = None
-# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
-#       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = oclock.Event()
 
 
 
@@ -89,6 +86,9 @@ class switches:
             f = open(FILE_NAME_SW_LOW[i], "w+")
             f.close()
 
+    # TODO: if we set configuration.SWITCH_TOGGLE_AUTO to True
+    #       we may have a poor performance.
+    #       Improve similar to buttons.do_button() if required!
     def do_switch(self):
         if self.toggle_switch == False:
             for i in range(configuration.NR_SWITCHES):

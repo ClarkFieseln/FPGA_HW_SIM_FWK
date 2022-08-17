@@ -39,7 +39,7 @@ USE_LED_FIFO = True # NOTE: this parameter is not in config.ini
 
 # NOTE: minimize application windows when not needed in order to increase performance.
 #       Intensive work on wave output on the simulator may also affect performance.
-#       Stress tests with CLOCK_PERIOD_EXTERNAL_MIN_MS:
+#       Stress tests with CLOCK_PERIOD:
 #       100ms (almost no jitter)
 #       50ms  (small jitter)
 #       10ms  (medium jitter)
@@ -110,6 +110,9 @@ event = event()
 # main window
 #############
 class MainWindow(QMainWindow, Ui_MainWindow):
+    # NOTE: be careful to initialize and/or use configuration within this part of the class.
+    #       Instead, do all that inside __init__()
+    #       This is true for all classes!
     cfg = None  # __init__.InitApp()
     appStarted = False
     status = ["/", "-", "\\", "|"]
@@ -257,12 +260,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.clock = clock(event, self.CLOCK_PERIOD_SEC) # NOTE: self.CLOCK_PERIOD_SEC is set within this call
         self.reset = reset(event)
         if USE_LED_FIFO == True:
-            self.leds = leds_fifo(event, self.CLOCK_PERIOD_SEC)
+            self.leds = leds_fifo(event)
         else:
-            self.leds = leds(event, self.CLOCK_PERIOD_SEC)
+            self.leds = leds(event)
         self.switches = switches(event, self.CLOCK_PERIOD_SEC)
         self.digital_inputs = digital_inputs(event, self.CLOCK_PERIOD_SEC)
-        self.digital_outputs = digital_outputs(event, self.CLOCK_PERIOD_SEC)
+        self.digital_outputs = digital_outputs(event)
         self.buttons = buttons(event, self.CLOCK_PERIOD_SEC)
         # fill "after" objects have been created
         self.ref_scheduler.clock = self.clock
@@ -310,6 +313,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.leMinClockPeriodMs.setText(str(configuration.CLOCK_PERIOD_EXTERNAL_MIN_MS))
         self.leResetSecs.setText(str(configuration.RESET_FOR_SECONDS))
         self.cbLogOnPowerOnOff.setChecked(configuration.LOG_ON_POWER_ON_OFF)
+        self.on_pbOnOff_toggled(configuration.LOG_ON_POWER_ON_OFF)
         self.leMaxDiCount.setText(str(configuration.MAX_DI_COUNT))
         self.leDiPerInClkPer.setText(str(configuration.DI_PER_IN_CLK_PER))
         self.leSwPerInClkPer.setText(str(configuration.SW_PER_IN_CLK_PER))
@@ -791,6 +795,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 configuration.CLOCK_PERIOD_EXTERNAL = str(tempValue * 1000000.0) + " ns"
                 # update GUI definitions (e.g. values to change polling rate of threads)
+                self.clock.updateGuiDefs() # NOTE: self.CLOCK_PERIOD_SEC is set within this call
                 self.updateGuiDefs()
                 self.buttons.updateGuiDefs()
                 self.digital_inputs.updateGuiDefs()
@@ -819,6 +824,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 configuration.RESET_FOR_SECONDS = str(tempValue)
                 # update GUI definitions (e.g. values to change polling rate of threads)
+                self.clock.updateGuiDefs()  # NOTE: self.CLOCK_PERIOD_SEC is set within this call
                 self.updateGuiDefs()
                 self.buttons.updateGuiDefs()
                 self.digital_inputs.updateGuiDefs()
@@ -1008,6 +1014,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # initialize file path
             self.init_file_path()
             # update GUI definitions
+            self.clock.updateGuiDefs()  # NOTE: self.CLOCK_PERIOD_SEC is set within this call
             self.updateGuiDefs()
             self.buttons.updateGuiDefs()
             self.digital_inputs.updateGuiDefs()

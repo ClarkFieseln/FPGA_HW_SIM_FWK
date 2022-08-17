@@ -12,8 +12,6 @@ from threading import Lock
 
 
 
-USE_DI_FIFO = False # NOTE: this parameter is not in config.ini
-
 # NOTE: we need root so we can close the messagebox
 root = tkinter.Tk()
 root.withdraw()
@@ -27,9 +25,6 @@ else:
 SYNC_DI = []
 ASYNC_DI = []
 DI_PERIOD_SEC = None
-# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
-#       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = oclock.Event()
 
 
 
@@ -37,29 +32,37 @@ class digital_inputs:
 #####################
     CLOCK_PERIOD_SEC = None
     __event = None
+    __evt_all_dis_set = oclock.Event()
+    __wait_di_set = 0 # count nr. of DIs yet to be set in thread..
     __di_count = 0
     __toggle_di = True
     # TODO: implement getter/setter for DI_HIGH[]
     DI_HIGH = []
-    for i in range(configuration.NR_DIS):
-        DI_HIGH.append(0)
     # fifo used
-    if USE_DI_FIFO:
-        __FIFO_W_DI_HIGH = [] # value written to FIFO (named pipe), set by python code
-        for i in range(configuration.NR_DIS):
-            __FIFO_W_DI_HIGH.append(0)
-        __fifo_w_di = []
-        # TODO: need __lock_w_di?
-        __lock_w_di = [] # lock to access __FIFO_W_DI_HIGH[]
-        # fill with None for now...initialization in threads instead.
-        for i in range(configuration.NR_DIS):
-            __fifo_w_di.append(0) # open(FILE_NAME_DI[i], 'w'))
-            __lock_w_di.append(Lock())
+    __FIFO_W_DI_HIGH = [] # value written to FIFO (named pipe), set by python code
+    __fifo_w_di = []
+    # TODO: need __lock_w_di?
+    __lock_w_di = [] # lock to access __FIFO_W_DI_HIGH[]
+    __evt_set_one = []
+    __evt_set_zero = []
 
     def __init__(self, event, CLOCK_PERIOD_SEC_ARG):
         logging.info('init digital_inputs')
         self.__event = event
         self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
+        for i in range(configuration.NR_DIS):
+            self.DI_HIGH.append(0)
+        # fifo used
+        if USE_DI_FIFO:
+            for i in range(configuration.NR_DIS):
+                self.__FIFO_W_DI_HIGH.append(0)
+            for i in range(configuration.NR_DIS):
+                self.__fifo_w_di.append(0)  # open(FILE_NAME_DI[i], 'w'))
+                self.__lock_w_di.append(Lock())
+        else:
+            for i in range(configuration.NR_DIS):
+                self.__evt_set_one.append(oclock.Event())
+                self.__evt_set_zero.append(oclock.Event())
         self.updateGuiDefs()
         self.createTempFiles()
         self.__updateMemberVariables()
@@ -75,6 +78,15 @@ class digital_inputs:
                 thread_name = "di_thread_sync_" + str(i)
                 di_thread_sync = threading.Thread(name=thread_name, target=self.__thread_di_sync, args=(thread_name, i))
                 di_thread_sync.start()
+        else:
+            for j in range(configuration.NR_SYNC_DI):
+                i = SYNC_DI[j]
+                thread_name = "__thread_set_one_" + str(i)
+                thread_set_one = threading.Thread(name=thread_name, target=self.__thread_set_one, args=(thread_name, i))
+                thread_set_one.start()
+                thread_name = "__thread_set_zero_" + str(i)
+                thread_set_zero = threading.Thread(name=thread_name, target=self.__thread_set_zero, args=(thread_name, i))
+                thread_set_zero.start()
 
     def updateGuiDefs(self):
         if USE_DI_FIFO:
@@ -199,17 +211,88 @@ class digital_inputs:
             #       sync DIs are updated.
             #       The complete DI values (sync + async) will not be regular/periodic in the wave output.
             # wait DI period
-            evt_wake_up.wait(DI_PERIOD_SEC)
+            self.__event.evt_wake_up.wait(DI_PERIOD_SEC)
             # wait random time within defined limits
-            # evt_wake_up.wait(random.uniform(self.CLOCK_PERIOD_SEC[0], DI_PERIOD_SEC))
+            # self.__evt_wake_up.wait(random.uniform(self.CLOCK_PERIOD_SEC[0], DI_PERIOD_SEC))
             ######################################
         logging.info("Thread %s: finished!", name)
 
+    # Manage file-handling in a separate thread.
+    # Therefore, we have no blocking issues when different files are handled sequentially.
+    # This brings a "huge" performance improvement!
     # TODO: investigate if it is possible to set DIs faster.
-    #       Why does it take 1ms to rename/remove a file in Win11 ?
-    # NOTE: 1ms is the default time it takes to set a DI by renaming the shared file or creating it for w+
-    #       But when e.g. switches are used then it may sometimes take 2ms.
-    #       When working intensively on VIVADO's wave-output, tests showed even higher values: 3ms, 4ms, 5ms,..
+    #       Why does it take so much (1ms?) to rename/remove a file in Win11 ?
+    def __thread_set_one(self, name, i):
+        logging.info("Thread %s: starting", name)
+        # thread loop
+        while self.__event.evt_close_app.is_set() == False:
+            # blocking call
+            self.__evt_set_one[i].wait()
+            self.__evt_set_one[i].clear()
+            if os.path.isfile(FILE_NAME_DI_LOW[i]):
+                renamed = False
+                while renamed == False:
+                    try:
+                        os.replace(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
+                        renamed = True
+                    except:
+                        # logging.warning("File cannot be renamed, we try again. File = " + FILE_NAME_DI_LOW[i])
+                        logging.debug("File cannot be renamed, we try again. File = " + FILE_NAME_DI_LOW[i])
+            else:
+                created = False
+                while created == False:
+                    try:
+                        f = open(FILE_NAME_DI_HIGH[i], "w+")
+                        f.close()
+                        created = True
+                    except:
+                        # logging.warning("File cannot be created, we try again. File = " + FILE_NAME_DI_HIGH[i])
+                        logging.debug("File cannot be created, we try again. File = " + FILE_NAME_DI_HIGH[i])
+            # all synchronous DIs within this clock cycle already set?
+            self.__wait_di_set = self.__wait_di_set - 1
+            if self.__wait_di_set == 0:
+                # inform calling function which in turn was called in scheduler
+                self.__evt_all_dis_set.set()
+        logging.info("Thread %s: finished!", name)
+
+    # Manage file-handling in a separate thread.
+    # Therefore, we have no blocking issues when different files are handled sequentially.
+    # This brings a "huge" performance improvement!
+    # TODO: investigate if it is possible to set DIs faster.
+    #       Why does it take so much (1ms?) to rename/remove a file in Win11 ?
+    def __thread_set_zero(self, name, i):
+        logging.info("Thread %s: starting", name)
+        # thread loop
+        while self.__event.evt_close_app.is_set() == False:
+            # blocking call
+            self.__evt_set_zero[i].wait()
+            self.__evt_set_zero[i].clear()
+            if os.path.isfile(FILE_NAME_DI_HIGH[i]):
+                renamed = False
+                while renamed == False:
+                    try:
+                        os.replace(FILE_NAME_DI_HIGH[i], FILE_NAME_DI_LOW[i])
+                        renamed = True
+                    except:
+                        # logging.warning("File cannot be renamed, we try again. File = " + FILE_NAME_DI_HIGH[i])
+                        logging.debug("File cannot be renamed, we try again. File = " + FILE_NAME_DI_HIGH[i])
+            else:
+                created = False
+                while created == False:
+                    try:
+                        f = open(FILE_NAME_DI_LOW[i], "w+")
+                        f.close()
+                        created = True
+                    except:
+                        # logging.warning("File cannot be created, we try again. File = " + FILE_NAME_DI_LOW[i])
+                        logging.debug("File cannot be created, we try again. File = " + FILE_NAME_DI_LOW[i])
+            # all synchronous DIs within this clock cycle already set?
+            self.__wait_di_set = self.__wait_di_set - 1
+            if self.__wait_di_set == 0:
+                # inform calling function which in turn was called in scheduler
+                self.__evt_all_dis_set.set()
+        logging.info("Thread %s: finished!", name)
+
     def do_di_count(self):
         for j in range(configuration.NR_SYNC_DI):
             i = SYNC_DI[j]
@@ -225,17 +308,8 @@ class digital_inputs:
                             self.__fifo_w_di[i].write("1\r\n")
                             self.__fifo_w_di[i].flush()
                     else:
-                        if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                            renamed = False
-                            while renamed == False:
-                                try:
-                                    os.replace(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
-                                    renamed = True
-                                except:
-                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
-                        else:
-                            f = open(FILE_NAME_DI_HIGH[i], "w+")
-                            f.close()
+                        self.__wait_di_set = self.__wait_di_set + 1
+                        self.__evt_set_one[i].set()
             else:
                 # need to clear bit?
                 if self.DI_HIGH[i] != 0:
@@ -248,18 +322,14 @@ class digital_inputs:
                             self.__fifo_w_di[i].write("0\r\n")
                             self.__fifo_w_di[i].flush()
                     else:
-                        if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                            renamed = False
-                            while renamed == False:
-                                try:
-                                    os.replace(FILE_NAME_DI_HIGH[i],FILE_NAME_DI_LOW[i])
-                                    renamed = True
-                                except:
-                                    logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
-                        else:
-                            f = open(FILE_NAME_DI_LOW[i], "w+")
-                            f.close()
+                        self.__wait_di_set = self.__wait_di_set + 1
+                        self.__evt_set_zero[i].set()
+        # increment counter
         self.__di_count = (self.__di_count + 1) % configuration.MAX_DI_COUNT
+        # wait until all DIs have been set in the threads..
+        # this assures that "synchronous" DIs are set within the current clock cycle
+        if self.__wait_di_set > 0:
+            self.__evt_all_dis_set.wait()
         # update GUI
         self.__event.evt_gui_di_update.set()
 
@@ -276,17 +346,8 @@ class digital_inputs:
                         self.__fifo_w_di[i].write("0\r\n")
                         self.__fifo_w_di[i].flush()
                 else:
-                    if os.path.isfile(FILE_NAME_DI_HIGH[i]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.replace(FILE_NAME_DI_HIGH[i], FILE_NAME_DI_LOW[i])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_HIGH[i])
-                    else:
-                        f = open(FILE_NAME_DI_LOW[i], "w+")
-                        f.close()
+                    self.__wait_di_set = self.__wait_di_set + 1
+                    self.__evt_set_zero[i].set()
         else:
             for j in range(configuration.NR_SYNC_DI):
                 i = SYNC_DI[j]
@@ -299,24 +360,20 @@ class digital_inputs:
                         self.__fifo_w_di[i].write("1\r\n")
                         self.__fifo_w_di[i].flush()
                 else:
-                    if os.path.isfile(FILE_NAME_DI_LOW[i]):
-                        renamed = False
-                        while renamed == False:
-                            try:
-                                os.replace(FILE_NAME_DI_LOW[i], FILE_NAME_DI_HIGH[i])
-                                renamed = True
-                            except:
-                                logging.warning("File cannot be renamed, we try again. File = "+FILE_NAME_DI_LOW[i])
-                    else:
-                        f = open(FILE_NAME_DI_HIGH[i], "w+")
-                        f.close()
+                    self.__wait_di_set = self.__wait_di_set + 1
+                    self.__evt_set_one[i].set()
         # toggle signal
         self.__toggle_di = not self.__toggle_di
+        # wait until all DIs have been set in the threads..
+        # this assures that "synchronous" DIs are set within the current clock cycle
+        if self.__wait_di_set > 0:
+            self.__evt_all_dis_set.wait()
         # update GUI
         self.__event.evt_gui_di_update.set()
 
-    # TODO: need to update threads as well?
-    #       or just remove this function?
+    # TODO: need to update member variables and threads as well.
+    #       need to call this method e.g. in on_cbNrDis_currentIndexChanged() in main Window?
+    #       or just remove this function and rely on restart of app for config changes to take effect?
     def __updateMemberVariables(self):
         self.DI_HIGH = []
         for i in range(configuration.NR_DIS):
@@ -330,8 +387,6 @@ class digital_inputs:
             SYNC_DI.append(i)
         for i in range(configuration.NR_ASYNC_DI):
             ASYNC_DI.append(configuration.NR_ASYNC_DI + i)
-
-
 
 
 

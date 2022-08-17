@@ -14,9 +14,6 @@ root.withdraw()
 # module definitions and variables:
 FILE_NAME_RESET_HIGH = None
 FILE_NAME_RESET_LOW = None
-# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
-#       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = oclock.Event()
 
 
 

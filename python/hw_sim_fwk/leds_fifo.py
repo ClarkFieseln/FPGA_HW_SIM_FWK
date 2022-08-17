@@ -16,34 +16,28 @@ root = tkinter.Tk()
 root.withdraw()
 
 FILE_NAME_LED = []
-LED_PERIOD_SEC = None
-# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
-#       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = oclock.Event()
 
 
 
 class leds_fifo:
 ######################
-    CLOCK_PERIOD_SEC = None
     __event = None
     # TODO: implement getter/setter for LED_ON[]
     LED_ON = [] # value set "synchronously" with "asynchronous" variable in __FIFO_R_LED_HIGH[]
     __FIFO_R_LED_HIGH = [] # value read from FIFO (named pipe), set by VHDL code
-    for i in range(configuration.NR_LEDS):
-        LED_ON.append(0)
-        __FIFO_R_LED_HIGH.append(0)
     __fifo_r_led = []
     __lock_r_led = [] # lock to access __FIFO_R_LED_HIGH[]
-    # fill with None or 0 for now...initialization in threads instead.
-    for i in range(configuration.NR_LEDS):
-        __fifo_r_led.append(0) # open(FILE_NAME_LED[i], 'r'))
-        __lock_r_led.append(Lock())
 
-    def __init__(self, event, CLOCK_PERIOD_SEC_ARG):
+    def __init__(self, event):
         logging.info('init leds_fifo')
         self.__event = event
-        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
+        for i in range(configuration.NR_LEDS):
+            self.LED_ON.append(0)
+            self.__FIFO_R_LED_HIGH.append(0)
+        # fill with None or 0 for now...initialization in threads instead.
+        for i in range(configuration.NR_LEDS):
+            self.__fifo_r_led.append(0)  # open(FILE_NAME_LED[i], 'r'))
+            self.__lock_r_led.append(Lock())
         self.updateGuiDefs()
         self.__updateMemberVariables()
         for i in range(configuration.NR_LEDS):
@@ -53,7 +47,6 @@ class leds_fifo:
 
     def updateGuiDefs(self):
         global FILE_NAME_LED
-        global LED_PERIOD_SEC
         if configuration.NR_LEDS > configuration.MAX_NR_LED:
             configuration.NR_LEDS = configuration.MAX_NR_LED
             logging.warning("maximum nr. of LEDs limited to " + str(configuration.MAX_NR_LED))
@@ -64,12 +57,6 @@ class leds_fifo:
         FILE_NAME_LED = []
         for i in range(configuration.NR_LEDS):
             FILE_NAME_LED.append(FILE_NAME_LED_PART + str(i))
-        # LED period
-        # ASSUMPTION: in worst case the LEDs are switched in every edge of the clock (both rising and falling edges)
-        #             under consideration of jitter we need to be faster than that when polling possible changes,
-        #             thus we define the period to be 1/4th of the clock period.
-        LED_PERIOD_SEC = self.CLOCK_PERIOD_SEC[0] / 4
-        logging.info("LED_PERIOD_SEC = " + str(LED_PERIOD_SEC))
 
     def __thread_fifo_r_led(self, name, i):
         logging.info("Thread %s: starting", name)
