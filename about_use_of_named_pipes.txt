@@ -1,4 +1,4 @@
-2022.08.10
+2022.08.18
 
 The use of FIFOs (named pipes) in this code is done as follows:
 - App to VHDL:
@@ -6,6 +6,10 @@ The use of FIFOs (named pipes) in this code is done as follows:
 - VHDL to App:
     - DOs
     - LEDs (not yet implemented)
+# The other signals are simulated with shared files that emulate digital signals one to one.
+  A third approach, passing digital information as data inside the shared files, worked as well.
+  win32file.CreateFile() blocked permanently because "other processes" retained the shared files,
+  for that reason a straight-forward and platform-independent open() was used instead.
 
 Note 1: using only shared files is possible but one CPU will be always at 100% polling the external clock.
         Instead, at least the external clock signal from the App shall be read in the VHDL code over a FIFO (named pipe) in order not to overload 1 core.
