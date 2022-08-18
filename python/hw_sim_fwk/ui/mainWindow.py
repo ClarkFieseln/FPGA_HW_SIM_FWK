@@ -153,8 +153,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     logging.info("INFO: start the VHDL tool if not yet started..GUI will then show up!")
     # information message in messagebox
     # TODO: solve bug before use: timed_messagebox("start the VHDL simulator if not done yet..GUI will then show up!", timeout=7000)
-    tkinter.messagebox.showinfo(title="INFORMATION", message="Please start the VHDL tool if not yet started!")
-    root.update()
+    # NOTE: uncomment to show message..
+    # tkinter.messagebox.showinfo(title="INFORMATION", message="Please start the VHDL tool if not yet started!")
+    # root.update()
 
     ######################################################################################
     # NOTE: we don't modify GUI objects from a QThread
