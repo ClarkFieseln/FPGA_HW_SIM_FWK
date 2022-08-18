@@ -96,6 +96,7 @@ class digital_inputs:
             global FILE_NAME_DI_LOW
         global SYNC_DI
         global ASYNC_DI
+        global DI_PERIOD_SEC
         # check max nr. of DIs and DOs
         if configuration.NR_DIS > configuration.MAX_NR_DI:
             configuration.NR_DIS = configuration.MAX_NR_DI
