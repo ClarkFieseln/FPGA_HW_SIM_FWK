@@ -55,10 +55,6 @@ USE_LED_FIFO = True # NOTE: this parameter is not in config.ini
 # - improve VHDL code: use blocks, etc.
 # - improve performance: use profiler to get rid of bottlenecks
 
-# init logging
-logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s',
-                    datefmt='%H:%M:%S', level=logging.INFO)
-
 # current frame
 cf = currentframe()
 
@@ -235,7 +231,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def init_file_path(self):
         # remove dir if it exists (this will clean everything up)
         if os.path.exists(configuration.FILE_PATH):
-            # Remove files
             logging.info("FILE_PATH = " + configuration.FILE_PATH + " exists..")
         else:
             # create temporary directory
@@ -276,7 +271,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.ref_scheduler.reset = self.reset
         self.ref_scheduler.switches = self.switches
         self.ref_scheduler.buttons = self.buttons
-        # instantiate scheculer
+        # instantiate scheduler
         self.scheduler = scheduler(event, self.CLOCK_PERIOD_SEC, self.csv_log, self.ref_scheduler)
         # setup Ui
         self.setupUi(self)
@@ -562,9 +557,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def updateGuiConfig(self):
         # update logging level
         self.updateLoggingLevel()
-        # start logger
-        format = '%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s'
-        logging.basicConfig(format=format, datefmt='%H:%M:%S:%m', level=configuration.LOGGING_LEVEL)
         # simulator options        
         self.leClkPeriods.setText(str(configuration.RUN_FOR_CLOCK_PERIODS))
         self.leClkPeriodMs.setText(str(float(self.CLOCK_PERIOD_SEC[0] * 1000.0)))
@@ -651,6 +643,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             event.evt_set_power_on.set()
             self.pbOnOff.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/off.png'))
             self.pbActive.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_green_on.png'))
+            logging.info("On")
             # set RESET to high for T/2 in order to initialize VHDL signals
             event.evt_set_reset_low.clear()
             event.evt_set_reset_high.set()
@@ -672,6 +665,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             event.evt_set_power_off.set()
             self.pbOnOff.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/on.png'))
             self.pbActive.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/led_green_off.png'))
+            logging.info("Off")
             # close log file
             if configuration.LOG_ON_POWER_ON_OFF == False:
                 if configuration.LOG_TO_CSV == True:
@@ -687,6 +681,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             event.evt_resume.clear()
             event.evt_pause.set()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/run.png'))
+            logging.info("Pause")
         else:
             # check if we need to remove step
             if event.evt_step_on.is_set() == True:
@@ -695,6 +690,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             event.evt_pause.clear()
             event.evt_resume.set()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/pause.png'))
+            logging.info("Resume")
         if configuration.SOUND_EFFECTS:
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
             powerSoundThread.start()
@@ -709,7 +705,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             event.evt_pause.clear()
             event.evt_resume.set()
             self.pbRunPause.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/pause.png'))
-        logging.info("STEP")
+        logging.info("Step")
         if configuration.SOUND_EFFECTS:
             powerSoundThread = threading.Thread(name="buttonSound", target=self.thread_buttonSound)
             powerSoundThread.start()
@@ -825,7 +821,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 tkinter.messagebox.showerror(title="ERROR", message="reset time shall be greater than zero")
                 root.update()
             else:
-                configuration.RESET_FOR_SECONDS = str(tempValue)
+                configuration.RESET_FOR_SECONDS = tempValue
                 # update GUI definitions (e.g. values to change polling rate of threads)
                 self.clock.updateGuiDefs()  # NOTE: self.CLOCK_PERIOD_SEC is set within this call
                 self.updateGuiDefs()
@@ -971,7 +967,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if index >= 0:
             self.cbLoggingLevel.setCurrentIndex(index)
             # NOTE: if the severity level is INFO, the logger will handle only INFO, WARNING, ERROR, and CRITICAL messages and will ignore DEBUG messages
-            # logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
             logging_level = logging.INFO
             if configuration.LOGGING_LEVEL == "logging.DEBUG":
                 logging_level = logging.DEBUG
@@ -983,10 +978,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 logging_level = logging.ERROR
             if configuration.LOGGING_LEVEL == "logging.CRITICAL":
                 logging_level = logging.CRITICAL
-            logging.basicConfig(format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S', level=logging_level)
+            logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s',
+                                datefmt='%H:%M:%S', level=logging_level, force=True)
         else:
             self.cbLoggingLevel.setCurrentIndex(1)  # default INFO
-            logging.basicConfig(format='%(asctime)s.%(msecs)03d %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
+            logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s',
+                                datefmt='%H:%M:%S', level=logging.INFO, force=True)
 
     @pyqtSlot()
     def on_cbShowLiveStatus_clicked(self):

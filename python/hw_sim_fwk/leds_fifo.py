@@ -58,6 +58,9 @@ class leds_fifo:
         for i in range(configuration.NR_LEDS):
             FILE_NAME_LED.append(FILE_NAME_LED_PART + str(i))
 
+    def createTempFiles(self):
+        return
+
     def __thread_fifo_r_led(self, name, i):
         logging.info("Thread %s: starting", name)
         # open FIFO for reading

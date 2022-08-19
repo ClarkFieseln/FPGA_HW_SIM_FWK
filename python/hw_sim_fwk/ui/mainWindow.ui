@@ -601,7 +601,7 @@
        <rect>
         <x>193</x>
         <y>87</y>
-        <width>251</width>
+        <width>231</width>
         <height>80</height>
        </rect>
       </property>
@@ -627,7 +627,7 @@
        <rect>
         <x>192</x>
         <y>4</y>
-        <width>251</width>
+        <width>231</width>
         <height>80</height>
        </rect>
       </property>
@@ -639,7 +639,7 @@
         <rect>
          <x>78</x>
          <y>26</y>
-         <width>171</width>
+         <width>141</width>
          <height>41</height>
         </rect>
        </property>
@@ -664,9 +664,9 @@
      <widget class="QGroupBox" name="gbLogging">
       <property name="geometry">
        <rect>
-        <x>454</x>
+        <x>434</x>
         <y>170</y>
-        <width>281</width>
+        <width>301</width>
         <height>80</height>
        </rect>
       </property>
@@ -681,7 +681,7 @@
         <rect>
          <x>21</x>
          <y>23</y>
-         <width>241</width>
+         <width>261</width>
          <height>22</height>
         </rect>
        </property>
@@ -696,16 +696,16 @@
         </rect>
        </property>
        <property name="text">
-        <string>on</string>
+        <string>.csv</string>
        </property>
       </widget>
       <widget class="QCheckBox" name="cbLogOnPowerOnOff">
        <property name="geometry">
         <rect>
-         <x>118</x>
+         <x>89</x>
          <y>50</y>
-         <width>151</width>
-         <height>17</height>
+         <width>191</width>
+         <height>20</height>
         </rect>
        </property>
        <property name="text">
@@ -716,9 +716,9 @@
      <widget class="QGroupBox" name="groupBox_4">
       <property name="geometry">
        <rect>
-        <x>454</x>
+        <x>434</x>
         <y>4</y>
-        <width>281</width>
+        <width>301</width>
         <height>80</height>
        </rect>
       </property>
@@ -743,7 +743,7 @@
         <rect>
          <x>24</x>
          <y>52</y>
-         <width>101</width>
+         <width>131</width>
          <height>16</height>
         </rect>
        </property>
@@ -769,7 +769,7 @@
         <rect>
          <x>140</x>
          <y>30</y>
-         <width>121</width>
+         <width>151</width>
          <height>17</height>
         </rect>
        </property>
@@ -783,7 +783,7 @@
        <rect>
         <x>192</x>
         <y>170</y>
-        <width>251</width>
+        <width>231</width>
         <height>80</height>
        </rect>
       </property>
@@ -807,9 +807,9 @@
      <widget class="QGroupBox" name="groupBox_5">
       <property name="geometry">
        <rect>
-        <x>455</x>
+        <x>435</x>
         <y>87</y>
-        <width>281</width>
+        <width>301</width>
         <height>80</height>
        </rect>
       </property>
@@ -834,7 +834,7 @@
         <rect>
          <x>24</x>
          <y>52</y>
-         <width>121</width>
+         <width>141</width>
          <height>16</height>
         </rect>
        </property>
@@ -847,7 +847,7 @@
         <rect>
          <x>141</x>
          <y>30</y>
-         <width>21</width>
+         <width>31</width>
          <height>16</height>
         </rect>
        </property>
@@ -1152,7 +1152,7 @@
         <rect>
          <x>132</x>
          <y>64</y>
-         <width>261</width>
+         <width>291</width>
          <height>16</height>
         </rect>
        </property>
@@ -1282,7 +1282,7 @@
         <rect>
          <x>24</x>
          <y>52</y>
-         <width>131</width>
+         <width>171</width>
          <height>16</height>
         </rect>
        </property>

@@ -44,7 +44,8 @@ def initConfig():
         logging_level = logging.CRITICAL    
     # if the severity level is INFO, the logger will handle only INFO, WARNING, ERROR, and CRITICAL messages and will ignore DEBUG messages
     # log with details
-    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s', datefmt='%H:%M:%S', level=logging_level)
+    # NOTE: parameter force since python 3.8
+    logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s {%(module)s} [%(funcName)s] %(message)s', datefmt='%H:%M:%S', level=logging_level, force=True)
     # start logger
     logging.info("set logging level to " + configuration.LOGGING_LEVEL)
 
