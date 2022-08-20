@@ -416,7 +416,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.di_wdg[i].setObjectName("di_" + str(i))
             self.di_wdg[i].setText(str(self.digital_inputs.DI_HIGH[i]))
         # digital outputs
-        for i in range(configuration.NR_DIS):
+        for i in range(configuration.NR_DOS):
             # do label
             label = QtWidgets.QLabel(self.tab_fpga)
             label.setGeometry(QtCore.QRect(975 - i * 2 * 12 - (i / 4) * 3, 490, 58, 16))
