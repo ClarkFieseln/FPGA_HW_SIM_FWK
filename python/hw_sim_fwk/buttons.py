@@ -60,8 +60,7 @@ class buttons:
         if configuration.BUTTON_TOGGLE_AUTO == False:
             for i in range(configuration.NR_BUTTONS):
                 thread_name = "button_thread_" + str(i)
-                button_thread = threading.Thread(name=thread_name, target=self.thread_button,
-                                                 args=(thread_name, i,))
+                button_thread = threading.Thread(name=thread_name, target=self.thread_button, args=(thread_name, i,))
                 button_thread.start()
         else:
             for i in range(configuration.NR_BUTTONS):
