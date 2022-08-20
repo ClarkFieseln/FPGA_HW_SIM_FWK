@@ -35,7 +35,27 @@ entity top_module is
         -- dio:
         di_in             : in  std_logic_vector(NR_DIS - 1 downto 0);
         do_out            : out std_logic_vector(NR_DOS - 1 downto 0)        
-    );
+    );    
+    -- TEST
+    -- ###################
+    FUNCTION reverse(a : IN STD_LOGIC_VECTOR) RETURN STD_LOGIC_VECTOR IS
+        VARIABLE result : STD_LOGIC_VECTOR(a'RANGE);
+        ALIAS aa : STD_LOGIC_VECTOR(a'REVERSE_RANGE) IS a;
+        BEGIN
+            FOR i IN aa'RANGE LOOP
+                result(i) := aa(i);
+            END LOOP;
+        RETURN result;
+    END;
+    FUNCTION invert(a : IN STD_LOGIC_VECTOR) RETURN STD_LOGIC_VECTOR IS
+        VARIABLE result : STD_LOGIC_VECTOR(a'RANGE);
+        BEGIN
+            FOR i IN a'RANGE LOOP
+                result(i) := not(a(i));
+            END LOOP;
+        RETURN result;
+    END;    
+    -- ###################
 end top_module;
 
 architecture Behavioral of top_module is
@@ -129,8 +149,7 @@ begin
             -- out modMCounter
             complete_tick_out <= complete_tick_tm;
             count_out         <= count_tm;
-            -- in switch_leds
-            
+            -- in switch_leds            
             -- TEST
             -- ###################
             -- switch_in as input:
@@ -138,10 +157,15 @@ begin
             -- di_in as input:
             ---- switch_tm         <= di_in;
             -- d_in and switch_in as combined inputs:
+            -- NOTE: if we use
+            --       switch_tm(NR_DIS/2-1 downto 0)                <= di_in(NR_DIS/2-1 downto 0);
+            --       then we get the following warning, but that's fine
+            --       WARNING: [Synth 8-7129] Port switch_in[0] in module top_module is either unconnected or has no load
             switch_tm(NR_DIS/2-1 downto 0)                <= di_in(NR_DIS/2-1 downto 0);
+            -- NOTE: here another example without warnings
+            -- switch_tm(NR_DIS/2-1 downto 0)                <= di_in(NR_DIS/2-1 downto 0) and invert(switch_in(NR_SWITCHES/2-1 downto 0));
             switch_tm(NR_SWITCHES-1 downto NR_SWITCHES/2) <= switch_in(NR_SWITCHES-1 downto NR_SWITCHES/2);
-            -- ###################
-            
+            -- ###################            
             button_tm         <= button_in;
             -- out switch_leds
             led_out           <= led_tm;
