@@ -1,4 +1,3 @@
-import oclock
 import logging
 import configuration
 from inspect import currentframe
@@ -7,7 +6,7 @@ if platform == "win32":
     import win32file
 import threading
 import tkinter
-import time
+from timeit import default_timer as cProfileTimer
 from common_fifo import create_w_fifo
 
 
@@ -101,7 +100,7 @@ class scheduler:
         while self.__event.evt_close_app.is_set() == False:
             # time measurement
             if configuration.TEST:
-                self.start_time = time.time()
+                self.start_time = cProfileTimer()
             # device on?
             if self.__event.evt_set_power_on.is_set() == True:
                 # toggle signal
@@ -178,7 +177,7 @@ class scheduler:
                     self.__event.evt_clock.clear()
             else:
                 if configuration.TEST:
-                    end_time = time.time()
+                    end_time = cProfileTimer()
                     tdiff = self.start_time - self.test.prev_time
                     self.test.prev_time = self.start_time
                     if tdiff != 0:
