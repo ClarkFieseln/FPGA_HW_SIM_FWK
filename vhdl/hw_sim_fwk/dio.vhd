@@ -53,11 +53,13 @@ begin
         -- output signals
         -- ##############
         do <= do_reg;
-    end generate g_conditional_process;
-    -- Note: the "else generate" construct is only supported in VHDL 1076-2008
-    --       so we use a separate (and complementary) generate condition
-    g_conditional_wirethrough : if USE_PROCESS_LOGIC = false generate
+    else generate
+        -- NOTE: here we get the following warnings but we can "wire-through" DI->DO signals without additional delays/flip-flops
+        --       WARNING: [Synth 8-7129] Port reset in module dio is either unconnected or has no load
+        --       WARNING: [Synth 8-7129] Port clock in module dio is either unconnected or has no load
         do <= di;
-    end generate g_conditional_wirethrough;
+    end generate g_conditional_process;
 end Behavioral;
+
+
 
