@@ -691,18 +691,18 @@
         <rect>
          <x>21</x>
          <y>50</y>
-         <width>51</width>
+         <width>71</width>
          <height>17</height>
         </rect>
        </property>
        <property name="text">
-        <string>.csv</string>
+        <string>to .csv</string>
        </property>
       </widget>
       <widget class="QCheckBox" name="cbLogOnPowerOnOff">
        <property name="geometry">
         <rect>
-         <x>89</x>
+         <x>106</x>
          <y>50</y>
          <width>191</width>
          <height>20</height>
