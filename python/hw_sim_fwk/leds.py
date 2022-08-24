@@ -1,5 +1,4 @@
 import configuration
-import oclock
 import logging
 import tkinter
 import os
@@ -108,5 +107,6 @@ class leds:
                     self.LED_ON[i] = 0
         # inform GUI
         self.__event.evt_gui_led_update.set()
+
 
 

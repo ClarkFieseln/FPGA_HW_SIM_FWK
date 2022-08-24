@@ -12,9 +12,6 @@ import tkinter.messagebox
 from tkinter import filedialog
 import functools
 from sys import platform
-# NOTE: with a time delay of 1 ~ 15 ms threading.Event.wait() works really bad!
-#       We use oclock.Event.wait() together with set_resolution_ns() instead, which seems to work better, see
-#       https://stackoverflow.com/questions/48984512/making-a-timer-timeout-inaccuracy-of-threading-event-wait-python-3-6
 import os
 import logging
 import threading
@@ -22,6 +19,9 @@ import time
 # own modules
 import configuration
 import init
+# NOTE: with a time delay of 1 ~ 15 ms threading.Event.wait() works really bad!
+#       We use oclock.Event.wait() together with set_resolution_ns() instead, which seems to work better, see
+#       https://stackoverflow.com/questions/48984512/making-a-timer-timeout-inaccuracy-of-threading-event-wait-python-3-6
 import oclock
 from clock import clock
 from digital_inputs import digital_inputs
@@ -31,11 +31,18 @@ from leds_fifo import leds_fifo
 from reset import reset
 from switches import switches
 from buttons import buttons
+from pc_sensor import pc_sensor
+from LT2314 import LT2314
 from scheduler import scheduler
+from adc_app import adc_app
 
 
 
 USE_LED_FIFO = True # NOTE: this parameter is not in config.ini
+if platform == "win32":
+    FONT = 'Segoe UI'
+else:
+    FONT = 'Ubuntu Mono'
 
 # NOTE: minimize application windows when not needed in order to increase performance.
 #       Intensive work on wave output on the simulator may also affect performance.
@@ -96,6 +103,8 @@ class event():
     # NOTE: using individual events for each of the DIs and DOs to "fine tune" GUI update decreases performance!
     evt_gui_di_update = oclock.Event()
     evt_gui_do_update = oclock.Event()
+    evt_gui_temperature_update = oclock.Event()
+    evt_gui_int_out_update = oclock.Event()
     evt_gui_led_update = oclock.Event()
     evt_gui_remain_run_time_update = oclock.Event()
 # object/instance
@@ -103,9 +112,8 @@ event = event()
 
 
 
-# main window
-#############
 class MainWindow(QMainWindow, Ui_MainWindow):
+#############################################
     # NOTE: be careful to initialize and/or use configuration within this part of the class.
     #       Instead, do all that inside __init__()
     #       This is true for all classes!
@@ -125,6 +133,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     reset = None
     switches = None
     buttons = None
+    LT2314 = None
+    pc_sensor = None
+    adc_app = None
     scheduler = None
     # references to specific peripheral and app objects to be passed to scheduler as a single parameter
     class ref_scheduler():
@@ -135,6 +146,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         reset = None
         switches = None
         buttons = None
+        pc_sensor = None
+        adc_app = None
     # object/instance
     ref_scheduler = ref_scheduler()
     # widgets:
@@ -205,6 +218,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     event.evt_gui_do_update.clear()
                     for i in range(configuration.NR_DOS):
                         self.do_wdg[i].setText(str(self.digital_outputs.DO_HIGH[i]))
+                ##############################################
+                # NOTE display data corresponds to sensor data
+                # temperature sensor
+                # NOTE: comment the following code so lblTemp can be updated together with lcdTempOut
+                # '''
+                if event.evt_gui_temperature_update.is_set():
+                    event.evt_gui_temperature_update.clear()
+                    self.lblTemp.setText(str(self.LT2314.get_temperature()))
+                # '''
+                # LCD display
+                if event.evt_gui_int_out_update.is_set():
+                    event.evt_gui_int_out_update.clear()
+                    self.lcdTempOut.display(self.adc_app.get_data_out())
+                    # update also the temperature sensor
+                    # with the value used for the last transmission from ADC to FPGA over SPI
+                    # NOTE: comment this line if lblTemp is updated when evt_gui_temperature_update is set
+                    # self.lblTemp.setText(str(self.LT2314.get_temperature()))
+                ##############################################
                 # update remaining time when running for time
                 if event.evt_gui_remain_run_time_update.is_set():
                     event.evt_gui_remain_run_time_update.clear()
@@ -263,6 +294,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.digital_inputs = digital_inputs(event, self.CLOCK_PERIOD_SEC)
         self.digital_outputs = digital_outputs(event)
         self.buttons = buttons(event, self.CLOCK_PERIOD_SEC)
+        self.pc_sensor = pc_sensor(event, self.CLOCK_PERIOD_SEC)
+        self.LT2314 = LT2314(event, self.pc_sensor)
+        self.adc_app = adc_app(event, self.CLOCK_PERIOD_SEC)
         # fill "after" objects have been created
         self.ref_scheduler.clock = self.clock
         self.ref_scheduler.digital_inputs = self.digital_inputs
@@ -271,35 +305,40 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.ref_scheduler.reset = self.reset
         self.ref_scheduler.switches = self.switches
         self.ref_scheduler.buttons = self.buttons
+        self.ref_scheduler.pc_sensor = self.pc_sensor
+        self.ref_scheduler.adc_app = self.adc_app
         # instantiate scheduler
         self.scheduler = scheduler(event, self.CLOCK_PERIOD_SEC, self.csv_log, self.ref_scheduler)
         # setup Ui
         self.setupUi(self)
         # further Ui setup
+        self.pbThermoIn.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/thermometer.jpg'))
+        self.pbAdc.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/adc.jpg'))
+        self.pbDisplay.setIcon(QtGui.QIcon(configuration.PATH_PREFIX + 'icons/display.jpg'))
         self.tabWidget.setCurrentIndex(self.tabWidget.indexOf(self.tab_fpga)) # default tab is tab_fpga
         self.cbLogOnPowerOnOff.setToolTip("Log over power on/off in a single file if checked.")
         self.leFilePath.setText(configuration.FILE_PATH)
         self.leFifoPath.setText(configuration.FIFO_PATH)
-        self.leClkPeriods.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leClkPeriods.setFont(QFont(FONT, configuration.TEXT_SIZE))
         self.leClkPeriods.setValidator(QIntValidator())
-        self.leClkPeriodMs.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leClkPeriodMs.setFont(QFont(FONT, configuration.TEXT_SIZE))
         # TODO: check why this validator is not working, impeding correct input on GUI
         # self.leClkPeriodMs.setValidator(QDoubleValidator()) # self.leClkPeriodMs.setValidator(QIntValidator())
-        self.leGuiRefreshHz.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leGuiRefreshHz.setFont(QFont(FONT, configuration.TEXT_SIZE))
         self.leGuiRefreshHz.setValidator(QIntValidator())
-        self.leMinClockPeriodMs.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leMinClockPeriodMs.setFont(QFont(FONT, configuration.TEXT_SIZE))
         # TODO: check why this validator is not working, impeding correct input on GUI
         # self.leMinClockPeriodMs.setValidator(QDoubleValidator()) # (QIntValidator())
-        self.leResetSecs.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leResetSecs.setFont(QFont(FONT, configuration.TEXT_SIZE))
         # TODO: check why this validator is not working, impeding correct input on GUI
         # self.leResetSecs.setValidator(QDoubleValidator()) # (QIntValidator())
-        self.leMaxDiCount.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leMaxDiCount.setFont(QFont(FONT, configuration.TEXT_SIZE))
         self.leMaxDiCount.setValidator(QIntValidator())
-        self.leDiPerInClkPer.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leDiPerInClkPer.setFont(QFont(FONT, configuration.TEXT_SIZE))
         self.leDiPerInClkPer.setValidator(QIntValidator())
-        self.leSwPerInClkPer.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leSwPerInClkPer.setFont(QFont(FONT, configuration.TEXT_SIZE))
         self.leSwPerInClkPer.setValidator(QIntValidator())
-        self.leBtnPerClkPer.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE))
+        self.leBtnPerClkPer.setFont(QFont(FONT, configuration.TEXT_SIZE))
         self.leBtnPerClkPer.setValidator(QIntValidator())
         self.lblVersion.setToolTip(configuration.VERSION_TOOL_TIP)
         self.cbPlotShow.setChecked(configuration.SHOW_PLOT)
@@ -314,6 +353,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.on_pbOnOff_toggled(configuration.LOG_ON_POWER_ON_OFF)
         self.leMaxDiCount.setText(str(configuration.MAX_DI_COUNT))
         self.leDiPerInClkPer.setText(str(configuration.DI_PER_IN_CLK_PER))
+        self.leBattPerClkPer.setText(str(configuration.PC_UTIL_PER_IN_CLK_PER))
+        self.leAdcSamplingPerClkPer.setText(str(configuration.ADC_SAMPLING_PERIOD_IN_CLK_PER))
         self.leSwPerInClkPer.setText(str(configuration.SW_PER_IN_CLK_PER))
         self.leBtnPerClkPer.setText(str(configuration.BUTTON_PER_IN_CLK_PER))
         self.cbBtnToggleAuto.setChecked(configuration.BUTTON_TOGGLE_AUTO)
@@ -361,20 +402,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         label.setStyleSheet("color: rgb(238, 238, 236);")
         label.setObjectName("keep_pressed")
         label.setText("keep\npressed")
-        label.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE - 3))
+        label.setFont(QFont(FONT, configuration.TEXT_SIZE - 3))
         label = QtWidgets.QLabel(self.tab_fpga)
         label.setGeometry(QtCore.QRect(175, 290, 58, 56))
         label.setStyleSheet("color: rgb(238, 238, 236);")
         label.setObjectName("keep_pressed_y_n")
         label.setText("y  n")
-        label.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE - 3))
+        label.setFont(QFont(FONT, configuration.TEXT_SIZE - 3))
         # refresh rate of GUI
         label = QtWidgets.QLabel(self.tab_fpga)
         label.setGeometry(QtCore.QRect(990, 450, 58, 56))
         label.setStyleSheet("color: rgb(238, 238, 236);")
         label.setObjectName("refreh_gui")
         label.setText("GUI")
-        label.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE - 3))
+        label.setFont(QFont(FONT, configuration.TEXT_SIZE - 3))
         # combo boxes for logging level
         self.cbLoggingLevel.addItem("logging.DEBUG")
         self.cbLoggingLevel.addItem("logging.INFO")
@@ -394,13 +435,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         label.setStyleSheet("color: rgb(238, 238, 236);")
         label.setObjectName("dis")
         label.setText("DIx:")
-        label.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE - 3))
+        label.setFont(QFont(FONT, configuration.TEXT_SIZE - 3))
         label = QtWidgets.QLabel(self.tab_fpga)
         label.setGeometry(QtCore.QRect(725, 450, 58, 56))
         label.setStyleSheet("color: rgb(238, 238, 236);")
         label.setObjectName("dos")
         label.setText("DOx:")
-        label.setFont(QFont('Ubuntu Mono', configuration.TEXT_SIZE - 3))
+        label.setFont(QFont(FONT, configuration.TEXT_SIZE - 3))
         # digital inputs
         for i in range(configuration.NR_DIS):
             # di label
@@ -797,6 +838,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.clock.updateGuiDefs() # NOTE: self.CLOCK_PERIOD_SEC is set within this call
                 self.updateGuiDefs()
                 self.buttons.updateGuiDefs()
+                self.pc_sensor.updateGuiDefs()
+                self.adc_app.updateGuiDefs()
+                self.LT2314.updateGuiDefs()
                 self.digital_inputs.updateGuiDefs()
                 self.digital_outputs.updateGuiDefs()
                 self.leds.updateGuiDefs()
@@ -826,6 +870,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.clock.updateGuiDefs()  # NOTE: self.CLOCK_PERIOD_SEC is set within this call
                 self.updateGuiDefs()
                 self.buttons.updateGuiDefs()
+                self.pc_sensor.updateGuiDefs()
+                self.adc_app.updateGuiDefs()
+                self.LT2314.updateGuiDefs()
                 self.digital_inputs.updateGuiDefs()
                 self.digital_outputs.updateGuiDefs()
                 self.leds.updateGuiDefs()
@@ -1022,6 +1069,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.clock.updateGuiDefs()  # NOTE: self.CLOCK_PERIOD_SEC is set within this call
             self.updateGuiDefs()
             self.buttons.updateGuiDefs()
+            self.pc_sensor.updateGuiDefs()
+            self.adc_app.updateGuiDefs()
+            self.LT2314.updateGuiDefs()
             self.digital_inputs.updateGuiDefs()
             self.digital_outputs.updateGuiDefs()
             self.leds.updateGuiDefs()
@@ -1074,6 +1124,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             logging.error("DI period in clock periods shall be an integer value")
             tkinter.messagebox.showerror(title="ERROR", message="DI period in clock periods shall be an integer value")
             root.update()
+
+    @pyqtSlot()
+    def on_leBattPerInClkPer_editingFinished(self):
+        try:
+            configuration.PC_UTIL_PER_IN_CLK_PER = int(self.leBattPerInClkPer.text())
+        except:
+            # NOTE: set text to current value
+            self.leBattPerInClkPer.setText(str(configuration.PC_UTIL_PER_IN_CLK_PER))
+            logging.error("PC info period in clock periods shall be an integer value")
+            tkinter.messagebox.showerror(title="ERROR", message="PC info period in clock periods shall be an integer value")
+            root.update()
+        # TODO: check this
+        self.pc_sensor.updateGuiDefs()
+
+    @pyqtSlot()
+    def on_leAdcSamplingPerClkPer_editingFinished(self):
+        try:
+            configuration.ADC_SAMPLING_PERIOD_IN_CLK_PER = int(self.leAdcSamplingPerClkPer.text())
+        except:
+            # NOTE: set text to current value
+            self.leAdcSamplingPerClkPer.setText(str(configuration.ADC_SAMPLING_PERIOD_IN_CLK_PER))
+            logging.error("ADC sampling period in clock periods shall be an integer value")
+            tkinter.messagebox.showerror(title="ERROR", message="ADC sampling period in clock periods shall be an integer value")
+            root.update()
+        # TODO: check this
+        self.adc_app.updateGuiDefs()
 
     @pyqtSlot()
     def on_leSwPerInClkPer_editingFinished(self):
@@ -1150,29 +1226,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def on_cbNrDos_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_DOS = index
-        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
-        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbNrBtns_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_BUTTONS = index
-        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
-        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbNrSwitches_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_SWITCHES = index
-        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
-        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbNrLeds_currentIndexChanged(self, index):
         if self.appStarted:
             configuration.NR_LEDS = index
-        # TODO: need to update lists as in on_cbNrAsyncDis_currentIndexChanged() by calling something like
-        #       digital_inputs.updateNrDisOrAsyncDis() ?
 
     @pyqtSlot(int)
     def on_cbMaxDiCount_currentIndexChanged(self, index):

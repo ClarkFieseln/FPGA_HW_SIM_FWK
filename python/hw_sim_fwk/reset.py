@@ -1,4 +1,3 @@
-import oclock
 import logging
 import configuration
 import os

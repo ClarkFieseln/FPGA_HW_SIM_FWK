@@ -1,4 +1,3 @@
-
 import configuration
 import configparser
 from tkinter.filedialog import askopenfilename,  asksaveasfilename
@@ -12,7 +11,8 @@ import logging
 # we need this, otherwise we see the Tk window
 Tk().withdraw() 
 
-    
+
+
 class InitApp(object):
 ######################
     config = configparser.ConfigParser(allow_no_value=True)
@@ -163,7 +163,13 @@ class InitApp(object):
                     logging.info("MAX_DI_COUNT = " + str(configuration.MAX_DI_COUNT))                 
                 if "DI_PER_IN_CLK_PER" in self.config["commonConfig"]:
                     configuration.DI_PER_IN_CLK_PER = self.config.getint('commonConfig','DI_PER_IN_CLK_PER')
-                    logging.info("DI_PER_IN_CLK_PER = " + str(configuration.DI_PER_IN_CLK_PER))     
+                    logging.info("DI_PER_IN_CLK_PER = " + str(configuration.DI_PER_IN_CLK_PER))
+                if "PC_UTIL_PER_IN_CLK_PER" in self.config["commonConfig"]:
+                    configuration.PC_UTIL_PER_IN_CLK_PER = self.config.getint('commonConfig', 'PC_UTIL_PER_IN_CLK_PER')
+                    logging.info("PC_UTIL_PER_IN_CLK_PER = " + str(configuration.PC_UTIL_PER_IN_CLK_PER))
+                if "ADC_SAMPLING_PERIOD_IN_CLK_PER" in self.config["commonConfig"]:
+                    configuration.ADC_SAMPLING_PERIOD_IN_CLK_PER = self.config.getint('commonConfig', 'ADC_SAMPLING_PERIOD_IN_CLK_PER')
+                    logging.info("ADC_SAMPLING_PERIOD_IN_CLK_PER = " + str(configuration.ADC_SAMPLING_PERIOD_IN_CLK_PER))
                 if "SW_PER_IN_CLK_PER" in self.config["commonConfig"]:
                     configuration.SW_PER_IN_CLK_PER = self.config.getint('commonConfig','SW_PER_IN_CLK_PER')
                     logging.info("SW_PER_IN_CLK_PER = " + str(configuration.SW_PER_IN_CLK_PER))                      
@@ -235,7 +241,9 @@ class InitApp(object):
         # specific simulation parameters        
         self.config['commonConfig']['NR_ASYNC_DI'] = str(configuration.NR_ASYNC_DI)        
         self.config['commonConfig']['MAX_DI_COUNT'] = str(configuration.MAX_DI_COUNT)        
-        self.config['commonConfig']['DI_PER_IN_CLK_PER'] = str(configuration.DI_PER_IN_CLK_PER) 
+        self.config['commonConfig']['DI_PER_IN_CLK_PER'] = str(configuration.DI_PER_IN_CLK_PER)
+        self.config['commonConfig']['PC_UTIL_PER_IN_CLK_PER'] = str(configuration.PC_UTIL_PER_IN_CLK_PER)
+        self.config['commonConfig']['ADC_SAMPLING_PERIOD_IN_CLK_PER'] = str(configuration.ADC_SAMPLING_PERIOD_IN_CLK_PER)
         self.config['commonConfig']['SW_PER_IN_CLK_PER'] = str(configuration.SW_PER_IN_CLK_PER) 
         self.config['commonConfig']['BUTTON_PER_IN_CLK_PER'] = str(configuration.BUTTON_PER_IN_CLK_PER) 
         self.config['commonConfig']['BUTTON_TOGGLE_AUTO'] = str(configuration.BUTTON_TOGGLE_AUTO) 

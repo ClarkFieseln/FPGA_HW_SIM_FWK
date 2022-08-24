@@ -2,6 +2,7 @@
 library ieee;
 use ieee.std_logic_1164.ALL;
 
+
 entity switch_leds is
     generic(
         NR_SWITCHES : integer := 2;

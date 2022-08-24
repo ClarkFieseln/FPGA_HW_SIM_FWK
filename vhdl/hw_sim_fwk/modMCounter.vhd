@@ -6,6 +6,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+
 entity modMCounter is
     generic(
         M : integer := 5;               -- count from 0 to M-1
@@ -42,4 +43,7 @@ begin
     complete_tick <= '1' when count_reg = (M - 1) else '0';
     count         <= std_logic_vector(count_reg); -- assign value to output port
 end arch;
+
+
+
 

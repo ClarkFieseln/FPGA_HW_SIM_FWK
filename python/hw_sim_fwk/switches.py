@@ -1,4 +1,3 @@
-import oclock
 import logging
 import configuration
 import os
@@ -41,11 +40,11 @@ class switches:
             be = threading.Event()
             e1 = big_event(be)
             e2 = big_event(be)
-            ############
+            ###################################################################
             # TODO: investigate why these events don't work with oclock.Event()
             self.evt_set_switch_on.append(e1)
             self.evt_set_switch_off.append(e2)
-            ############
+            ###################################################################
             self.evt_set_switch_on_or_off.append(be)
         if configuration.SWITCH_TOGGLE_AUTO == False:
             for i in range(configuration.NR_SWITCHES):

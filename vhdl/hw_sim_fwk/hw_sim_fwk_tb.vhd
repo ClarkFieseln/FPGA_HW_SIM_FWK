@@ -10,6 +10,7 @@ use hw_sim_fwk.all;
 entity hw_sim_fwk_tb is
 end hw_sim_fwk_tb;
 
+
 architecture arch of hw_sim_fwk_tb is
     -- constants for generic map:
     -- ##########################
@@ -20,7 +21,10 @@ architecture arch of hw_sim_fwk_tb is
     constant PROTOCOL                     : boolean := false; -- to report details    
     constant FILE_PATH                    : string  := "C:/tmp/hw_sim_fwk/"; -- "/tmp/hw_sim_fwk/";
     constant FIFO_PATH                    : string  := "\\.\pipe\";
-    constant CLOCK_PERIOD                 : time    := 20 ns;
+    constant CLOCK_PERIOD                 : time    := 20 ns; -- 50 MHz
+    -- LT2314_driver
+    constant NR_DATA_OUT                  : integer := 16;
+	constant SCK_POSTSCALER               : std_logic_vector := "0000000000000010"; -- SCK = CLK_XXX_MHZ / (POSTSCALER*2) = (CLK_XXX_MHZ / 2) MHz
     -- modMCounter
     constant M                            : integer := 10;
     constant N                            : integer := 4;
@@ -96,6 +100,12 @@ architecture arch of hw_sim_fwk_tb is
     signal button_tb_dummy                : std_logic_vector(NR_BUTTONS - 1 downto 0);
     --Outputs
     signal led_tb                         : std_logic_vector(NR_LEDS - 1 downto 0);
+    -- signals LT2314 driver
+    signal sampling_pulse_tb              : std_logic;
+	signal SPI_DIN_tb                     : std_logic;
+	signal SPI_nCS_tb                     : std_logic;
+	signal SPI_CLK_tb                     : std_logic;
+	signal data_out_tb                    : std_logic_vector(15 downto 0);
     -- further signals:
     -- ################
     -- stdin/stdout is a good alternative to implement a HW simulation framework driven externally
@@ -255,21 +265,42 @@ begin
             clock_in => hw_clock_tb,
             hw_do_in => do_tb
         );
+        
+    -- instantiate hw LT2314 simulated externally
+    -- ##########################################
+    hw_sim_fwk_LT2314_unit : entity hw_sim_fwk_LT2314
+        generic map(
+            NR_DATA_OUT        => NR_DATA_OUT,
+            FILE_PATH          => FILE_PATH,
+            FIFO_PATH          => FIFO_PATH,
+            SCK_POSTSCALER     => SCK_POSTSCALER
+        )  
+        port map(
+            reset_in           => reset_tb,
+            clock_in           => hw_clock_tb,
+            data_out_in        => data_out_tb,
+            sampling_pulse_out => sampling_pulse_tb,
+	        SPI_DIN_out        => SPI_DIN_tb,
+	        SPI_nCS_in         => SPI_nCS_tb,
+	        SPI_CLK_in         => SPI_CLK_tb
+        );
     
     -- instantiate top_module
     -- ######################
     top_module_unit : entity top_module
         generic map(
             -- modMCounter
-            M           => M,
-            N           => N,
+            M              => M,
+            N              => N,
             -- switch_leds
-            NR_SWITCHES => NR_SWITCHES,
-            NR_BUTTONS  => NR_BUTTONS,
-            NR_LEDS     => NR_LEDS,
+            NR_SWITCHES    => NR_SWITCHES,
+            NR_BUTTONS     => NR_BUTTONS,
+            NR_LEDS        => NR_LEDS,
             -- dio
-            NR_DIS      => NR_DIS,
-            NR_DOS      => NR_DOS
+            NR_DIS         => NR_DIS,
+            NR_DOS         => NR_DOS,
+            -- LT2314_driver
+	        SCK_POSTSCALER => SCK_POSTSCALER
         )
         port map(
             -- common
@@ -284,7 +315,13 @@ begin
             led_out           => led_tb,
             -- dio
             di_in             => di_tb,
-            do_out            => do_tb
+            do_out            => do_tb,
+            -- LT2314_driver
+            data_out          => data_out_tb,      
+            sampling_pulse    => sampling_pulse_tb,
+            SPI_DIN           => SPI_DIN_tb,
+            SPI_nCS           => SPI_nCS_tb,
+            SPI_CLK           => SPI_CLK_tb
         );
         
     -- instantiate hw clock simulated externally

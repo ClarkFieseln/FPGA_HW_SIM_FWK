@@ -1,5 +1,4 @@
 import configuration
-import oclock
 import logging
 from threading import Lock
 import threading
@@ -20,7 +19,7 @@ FILE_NAME_LED = []
 
 
 class leds_fifo:
-######################
+################
     __event = None
     # TODO: implement getter/setter for LED_ON[]
     LED_ON = [] # value set "synchronously" with "asynchronous" variable in __FIFO_R_LED_HIGH[]
@@ -36,7 +35,7 @@ class leds_fifo:
             self.__FIFO_R_LED_HIGH.append(0)
         # fill with None or 0 for now...initialization in threads instead.
         for i in range(configuration.NR_LEDS):
-            self.__fifo_r_led.append(0)  # open(FILE_NAME_LED[i], 'r'))
+            self.__fifo_r_led.append(0)
             self.__lock_r_led.append(Lock())
         self.updateGuiDefs()
         self.__updateMemberVariables()
@@ -53,7 +52,7 @@ class leds_fifo:
             tkinter.messagebox.showwarning(title="WARNING", message="maximum nr. of LEDs limited to " + str(
                 configuration.MAX_NR_LED))
             root.update()
-        FILE_NAME_LED_PART = configuration.FIFO_PATH + "led_"  # temporary variable
+        FILE_NAME_LED_PART = configuration.FIFO_PATH + "led_"
         FILE_NAME_LED = []
         for i in range(configuration.NR_LEDS):
             FILE_NAME_LED.append(FILE_NAME_LED_PART + str(i))

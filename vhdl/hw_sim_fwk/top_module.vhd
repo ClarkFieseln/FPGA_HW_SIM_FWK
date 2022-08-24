@@ -1,7 +1,7 @@
 
-
 library ieee;
 use ieee.std_logic_1164.ALL;
+
 
 -- top_module just "passes through" signals to and from modMCounter and switch_leds modules.
 -- No additional logic here besides making sure that the intermediate signals are updated
@@ -11,33 +11,42 @@ use ieee.std_logic_1164.ALL;
 entity top_module is
     generic(
         -- modMCounter:
-        M           : integer := 5;     -- count from 0 to M-1
-        N           : integer := 3;     -- N bits required to count upto M i.e. 2**N >= M
+        M              : integer := 5;     -- count from 0 to M-1
+        N              : integer := 3;     -- N bits required to count upto M i.e. 2**N >= M
         -- switch_leds
-        NR_SWITCHES : integer := 2;
-        NR_BUTTONS  : integer := 2;
-        NR_LEDS     : integer := 2;
+        NR_SWITCHES    : integer := 2;
+        NR_BUTTONS     : integer := 2;
+        NR_LEDS        : integer := 2;
         -- dio
-        NR_DIS      : integer := 2;
-        NR_DOS      : integer := 2
+        NR_DIS         : integer := 2;
+        NR_DOS         : integer := 2;
+        -- LT2314_driver
+        -- SCK = CLK_XXX_MHZ / (POSTSCALER*2) = (CLK_XXX_MHZ / 2) MHz
+	    SCK_POSTSCALER : std_logic_vector := "0000000000000010"
     );
     port(
         -- common
-        reset_in          : in  std_logic;
-        clock_in          : in  std_logic;
+        reset_in           : in  std_logic;
+        clock_in           : in  std_logic;
         -- modMCounter:         
-        complete_tick_out : out std_logic;
-        count_out         : out std_logic_vector(N - 1 downto 0);
+        complete_tick_out  : out std_logic;
+        count_out          : out std_logic_vector(N - 1 downto 0);
         -- switch_leds:
-        switch_in         : in  std_logic_vector(NR_SWITCHES - 1 downto 0);
-        button_in         : in  std_logic_vector(NR_BUTTONS - 1 downto 0);
-        led_out           : out std_logic_vector(NR_LEDS - 1 downto 0);
+        switch_in          : in  std_logic_vector(NR_SWITCHES - 1 downto 0);
+        button_in          : in  std_logic_vector(NR_BUTTONS - 1 downto 0);
+        led_out            : out std_logic_vector(NR_LEDS - 1 downto 0);
         -- dio:
-        di_in             : in  std_logic_vector(NR_DIS - 1 downto 0);
-        do_out            : out std_logic_vector(NR_DOS - 1 downto 0)        
+        di_in              : in  std_logic_vector(NR_DIS - 1 downto 0);
+        do_out             : out std_logic_vector(NR_DOS - 1 downto 0);  
+        -- LT2314_driver
+        data_out           : out std_logic_vector(15 downto 0);        
+        sampling_pulse     : in  std_logic;
+	    SPI_DIN            : in  std_logic;
+	    SPI_nCS            : out std_logic;
+	    SPI_CLK            : out std_logic
     );    
-    -- TEST
-    -- ###################
+    -- NOTE: functions not used for now
+    -- ################################
     FUNCTION reverse(a : IN STD_LOGIC_VECTOR) RETURN STD_LOGIC_VECTOR IS
         VARIABLE result : STD_LOGIC_VECTOR(a'RANGE);
         ALIAS aa : STD_LOGIC_VECTOR(a'REVERSE_RANGE) IS a;
@@ -55,7 +64,7 @@ entity top_module is
             END LOOP;
         RETURN result;
     END;    
-    -- ###################
+    -- ################################
 end top_module;
 
 architecture Behavioral of top_module is
@@ -71,6 +80,12 @@ architecture Behavioral of top_module is
     -- signals dio
     signal do_tm              : std_logic_vector(NR_DOS - 1 downto 0);
     signal di_tm              : std_logic_vector(NR_DIS - 1 downto 0);
+    -- signals LT2314 driver
+    signal sampling_pulse_tm  : std_logic;
+	signal SPI_DIN_tm         : std_logic;
+	signal SPI_nCS_tm         : std_logic;
+	signal SPI_CLK_tm         : std_logic;
+	signal data_out_tm        : std_logic_vector(15 downto 0);
 begin
     -- instantiate modMCounter
     -- #######################    
@@ -117,7 +132,19 @@ begin
             di     => di_tm,            
             -- out
             do     => do_tm
-        );        
+        );      
+    -- instantiate LT2314_driver
+    -- #########################
+    proc_LT2314_driver: entity work.LT2314_driver   
+		port map(
+			clk            => clock_tm,  -- common signal
+			sampling_pulse => sampling_pulse_tm,
+			postscaler_in  => SCK_POSTSCALER,
+			spi_sck        => SPI_CLK_tm,
+			spi_cs_n       => SPI_nCS_tm,
+			spi_din        => SPI_DIN_tm,
+			data_out       => data_out_tm
+		);
     -- common process
     -- Note:
     --      in this process we put everything together.
@@ -130,8 +157,8 @@ begin
     proc_common : process(clock_in, reset_in) -- , switch_in, button_in)
     begin
         -- in common
-        clock_tm <= clock_in;
-        reset_tm <= reset_in;
+        -- clock_tm <= clock_in;
+        -- reset_tm <= reset_in;
         if reset_in = '1' then
             -- out modMCounter
             count_out         <= (others => '0');
@@ -145,6 +172,10 @@ begin
             di_tm             <= (others => '0');
             -- out dio
             do_out            <= (others => '0');
+            -- LT2314
+            data_out          <= (others => '0');
+            SPI_nCS           <= '1';
+            SPI_CLK           <= '0';
         elsif rising_edge(clock_in) then
             -- out modMCounter
             complete_tick_out <= complete_tick_tm;
@@ -157,12 +188,7 @@ begin
             -- di_in as input:
             ---- switch_tm         <= di_in;
             -- d_in and switch_in as combined inputs:
-            -- NOTE: if we use
-            --       switch_tm(NR_DIS/2-1 downto 0)                <= di_in(NR_DIS/2-1 downto 0);
-            --       then we get the following warning, but that's fine
-            --       WARNING: [Synth 8-7129] Port switch_in[0] in module top_module is either unconnected or has no load
             switch_tm(NR_DIS/2-1 downto 0)                <= di_in(NR_DIS/2-1 downto 0);
-            -- NOTE: here another example without warnings
             -- switch_tm(NR_DIS/2-1 downto 0)                <= di_in(NR_DIS/2-1 downto 0) and invert(switch_in(NR_SWITCHES/2-1 downto 0));
             switch_tm(NR_SWITCHES-1 downto NR_SWITCHES/2) <= switch_in(NR_SWITCHES-1 downto NR_SWITCHES/2);
             -- ###################            
@@ -173,7 +199,18 @@ begin
             di_tm             <= di_in;
             -- out dio
             do_out            <= do_tm;
+            -- LT2314
+            sampling_pulse_tm <= sampling_pulse;
+            SPI_DIN_tm        <= SPI_DIN;
+            data_out          <= data_out_tm;
+            SPI_nCS           <= SPI_nCS_tm;
+            SPI_CLK           <= SPI_CLK_tm;
         end if;
     end process proc_common;
+    -- in common
+    clock_tm <= clock_in;
+    reset_tm <= reset_in;
 end Behavioral;
+
+
 

@@ -7,6 +7,7 @@ use ieee.std_logic_textio.all;
 library hw_sim_fwk;
 use hw_sim_fwk.hw_sim_fwk_common.all;
 
+
 -- synthesis translate_off
 -- ######################
 -- NOTE: add this module to hw_sim_fwk library in your project, and associate it only with Simulation.
@@ -44,11 +45,15 @@ begin
             for i in 0 to NR_SIGSIN - 1 loop
                 -- initialize array of file names
                 -- workaround works up to 99 files
-                if i < 10 then
-                    SIGSIN_FILE(i) := SIGSIN_FILE_NAME & "_" & integer'image(i) & NUL; -- append NULL character
+                if NR_SIGSIN > 1 then
+                    if i < 10 then
+                        SIGSIN_FILE(i) := SIGSIN_FILE_NAME & "_" & integer'image(i) & NUL; -- append NULL character
+                    else
+                        SIGSIN_FILE(i) := SIGSIN_FILE_NAME & "_" & integer'image(i);
+                    end if; 
                 else
-                    SIGSIN_FILE(i) := SIGSIN_FILE_NAME & "_" & integer'image(i);
-                end if; 
+                    SIGSIN_FILE(i) := SIGSIN_FILE_NAME & NUL & NUL & NUL; -- fill last 3 characters with NULL
+                end if;
                 -- initialize digital input signal depending on file existence
                 if (file_exists(SIGSIN_FILE(i)) = true) then
                     sigsin(i) <= '1';

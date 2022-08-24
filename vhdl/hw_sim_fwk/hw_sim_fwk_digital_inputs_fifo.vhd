@@ -7,6 +7,7 @@ use ieee.std_logic_textio.all;
 library hw_sim_fwk;
 use hw_sim_fwk.hw_sim_fwk_common.all;
 
+
 -- synthesis translate_off
 -- ######################
 -- NOTE: add this module to hw_sim_fwk library in your project, and associate it only with Simulation.

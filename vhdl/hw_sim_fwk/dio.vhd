@@ -2,6 +2,7 @@
 library ieee;
 use ieee.std_logic_1164.ALL;
 
+
 entity dio is
     generic(
         NR_DIS : integer := 2;

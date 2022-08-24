@@ -6,6 +6,8 @@ import threading
 import tkinter
 from multiple_events import big_event
 
+
+
 # NOTE: we need root so we can close the messagebox
 root = tkinter.Tk()
 root.withdraw()
@@ -30,23 +32,22 @@ class buttons:
     # to avoid polling:
     evt_set_button_on_or_off = []
     # NOTE: __evt_set_one[] and __evt_set_one [] need to be declared even if BUTTON_TOGGLE_AUTO is currently False
-    # if configuration.BUTTON_TOGGLE_AUTO:
     __evt_set_one = []
     __evt_set_zero = []
 
-    def __init__(self, event, CLOCK_PERIOD_SEC_ARG):
+    def __init__(self, event, CLOCK_PERIOD_SEC):
         logging.info('init buttons')
         self.__event = event
-        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
+        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC
         if configuration.BUTTON_TOGGLE_AUTO:
             for i in range(configuration.NR_BUTTONS):
                 self.__evt_set_one.append(oclock.Event())
                 self.__evt_set_zero.append(oclock.Event())
         self.updateGuiDefs()
-        self.createTempFiles() # TODO: __createTempFiles() as private method ???
+        self.createTempFiles()
         # create events
-        for i in range(configuration.NR_SWITCHES):
-            # switch events
+        for i in range(configuration.NR_BUTTONS):
+            # button events
             be = threading.Event()
             e1 = big_event(be)
             e2 = big_event(be)
@@ -99,10 +100,6 @@ class buttons:
             f.close()
 
     # Manage file-handling in a separate thread.
-    # Therefore, we have no blocking issues when different files are handled sequentially.
-    # This brings a "huge" performance improvement!
-    # TODO: investigate if it is possible to set DIs faster.
-    #       Why does it take so much (1ms?) to rename/remove a file in Win11 ?
     def __thread_set_one(self, name, i):
         logging.info("Thread %s: starting", name)
         # thread loop
@@ -136,10 +133,6 @@ class buttons:
         logging.info("Thread %s: finished!", name)
 
     # Manage file-handling in a separate thread.
-    # Therefore, we have no blocking issues when different files are handled sequentially.
-    # This brings a "huge" performance improvement!
-    # TODO: investigate if it is possible to set files faster.
-    #       Why does it take so much (1ms?) to rename/remove a file in Win11 ?
     def __thread_set_zero(self, name, i):
         logging.info("Thread %s: starting", name)
         # thread loop
@@ -189,8 +182,6 @@ class buttons:
         # this assures that "synchronous" buttons are set within the current clock cycle
         if self.__wait_btn_set > 0:
             self.__evt_all_btns_set.wait()
-        # update GUI
-        # self.__event.evt_gui_button_update.set()
 
     def thread_button(self, name, i):
         logging.info("Thread %s(%s): starting", name, str(i))

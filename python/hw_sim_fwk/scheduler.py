@@ -23,7 +23,8 @@ if platform == "win32":
         r = ntdll.NtSetTimerResolution(resolution, 1, ctypes.byref(current))
         # NtSetTimerResolution uses 100ns units
         return current.value * 100
-    set_resolution_ns(1e-6 * NSEC_PER_SEC) # / NSEC_PER_SEC
+
+    set_resolution_ns(1e-6 * NSEC_PER_SEC)  # / NSEC_PER_SEC
 
 # NOTE: we need root so we can close the messagebox
 root = tkinter.Tk()
@@ -41,7 +42,7 @@ class scheduler:
 ################
     CLOCK_PERIOD_SEC = None
     __event = None
-    toggle = True # TODO: add getter/setter
+    toggle = True  # TODO: add getter/setter
     csv_log = None
     # peripheral and app objects
     digital_inputs = None
@@ -50,8 +51,10 @@ class scheduler:
     reset = None
     switches = None
     buttons = None
+    pc_sensor = None
+    adc_app = None
     # FIFO for clock
-    fifo_w_clock = None # create_w_fifo(FILE_NAME_CLOCK)
+    fifo_w_clock = None
     class test():
         freq = 0
         prev_time = 0
@@ -72,8 +75,11 @@ class scheduler:
         self.digital_inputs = ref.digital_inputs
         self.digital_outputs = ref.digital_outputs
         self.buttons = ref.buttons
+        self.pc_sensor = ref.pc_sensor
+        self.adc_app = ref.adc_app
         self.updateGuiDefs()
-        scheduler_thread = threading.Thread(name="scheduler_thread", target=self.thread_scheduler, args=("scheduler_thread",))
+        scheduler_thread = threading.Thread(name="scheduler_thread", target=self.thread_scheduler,
+                                            args=("scheduler_thread",))
         scheduler_thread.start()
 
     def updateGuiDefs(self):
@@ -105,6 +111,14 @@ class scheduler:
             if self.__event.evt_set_power_on.is_set() == True:
                 # toggle signal
                 if self.toggle == False:
+                    # handle PC sensors/infos
+                    #########################
+                    # sync sensor values
+                    if clock_periods % configuration.PC_UTIL_PER_IN_CLK_PER == 0:
+                        self.pc_sensor.do_pc_info()
+                        # logging.info("batt sync = " + str(self.pc_sensor.get_secsleft_sync()))
+                    # async sensor values
+                    # logging.info("batt asnc = " + str(self.pc_sensor.get_secsleft()))
                     # handle digital inputs
                     #######################
                     if clock_periods % configuration.DI_PER_IN_CLK_PER == 0:
@@ -127,9 +141,9 @@ class scheduler:
                     self.clock_high = False
                     # write clock = 0 = LOW
                     if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_clock, str.encode("0")) # \r\n"))
+                        win32file.WriteFile(self.fifo_w_clock, str.encode("0"))
                     else:
-                        self.fifo_w_clock.write("0\r\n")
+                        self.fifo_w_clock.write("0")
                         self.fifo_w_clock.flush()
                 else:
                     # handle clock - raising edge
@@ -137,10 +151,14 @@ class scheduler:
                     self.clock_high = True
                     # write clock = 1 = HIGH
                     if platform == "win32":
-                        win32file.WriteFile(self.fifo_w_clock, str.encode("1")) # \r\n"))
+                        win32file.WriteFile(self.fifo_w_clock, str.encode("1"))
                     else:
-                        self.fifo_w_clock.write("1\r\n")
+                        self.fifo_w_clock.write("1")
                         self.fifo_w_clock.flush()
+                    # ADC app
+                    #########
+                    if clock_periods % configuration.ADC_SAMPLING_PERIOD_IN_CLK_PER == 0:
+                        self.adc_app.set_sampling_pulse()
                     # handle digital outputs
                     ########################
                     self.digital_outputs.do_do()
@@ -181,7 +199,7 @@ class scheduler:
                     tdiff = self.start_time - self.test.prev_time
                     self.test.prev_time = self.start_time
                     if tdiff != 0:
-                        self.test.freq = 0.5/(tdiff)
+                        self.test.freq = 0.5 / (tdiff)
                         # self.test.log_buff += str(self.test.freq) + "\r\n"
                         self.test.log_buff += str(self.test.freq) + "," + str(self.test.nr_cycles) + "\r\n"
                         tdiff_sched = end_time - self.start_time
@@ -189,14 +207,15 @@ class scheduler:
                         # NOTE: uncomment next code to see warning..
                         # WARNING: logging this warning too often may worsen the problem
                         # if tdiff_sched > (self.CLOCK_PERIOD_SEC[0]/2):
-                            # logging.warning("processing time in scheduler = "+str(tdiff_sched)+" sec exceeds CLOCK_PERIOD_SEC = "+str(self.CLOCK_PERIOD_SEC[0]))
-                            # Note: if you get here you may need to select a higher value for CLOCK_PERIOD_SEC.
-                            #       The events generated by thread_clock will not be processed in time by thread_scheduler.
-                            #       If there are no external time dependencies, then the simulation may continue to run withtout problems,
-                            #       but at a lower pace as expected/desired.
+                        # logging.warning("processing time in scheduler = "+str(tdiff_sched)+" sec exceeds CLOCK_PERIOD_SEC = "+str(self.CLOCK_PERIOD_SEC[0]))
+                        # Note: if you get here you may need to select a higher value for CLOCK_PERIOD_SEC.
+                        #       The events generated by thread_clock will not be processed in time by thread_scheduler.
+                        #       If there are no external time dependencies, then the simulation may continue to run withtout problems,
+                        #       but at a lower pace as expected/desired.
                 self.__event.evt_clock.wait()
                 self.__event.evt_clock.clear()
         logging.info("Thread %s finished!", name)
+
 
 
 

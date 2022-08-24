@@ -12,10 +12,11 @@ use ieee.std_logic_textio.all;
 
 entity hw_sim_fwk_fifo_write is
     generic(
-        NR_SIGOUT               : integer := 2; -- current index of output signal
-        SIGOUT_PATH             : string  := "\\.\pipe\";
-        SIGOUT_FILE_NAME        : string  := SIGOUT_PATH & "sigout_" & integer'image(NR_SIGOUT);
-        PROTOCOL_SIGOUT         : boolean := false
+        NR_SIGOUT               : integer   := 2; -- current index of output signal
+        SIGOUT_PATH             : string    := "\\.\pipe\";
+        SIGOUT_FILE_NAME        : string    := SIGOUT_PATH & "sigout_" & integer'image(NR_SIGOUT);
+        SIG_VAL_ON_RESET        : std_logic := '0';
+        PROTOCOL_SIGOUT         : boolean   := false
     );
     port(
         reset    : in std_logic;
@@ -36,9 +37,6 @@ begin
         variable open_status : FILE_OPEN_STATUS;
         -- NOTE: it is not possible to create an array of files or
         --       including file type inside of a Record structure
-        -- type BYTE is array(7 downto 0) of BIT;
-        -- type INTEGER_FILE is file of BYTE;
-        -- file o_file          : INTEGER_FILE; 
         type CHARACTER_FILE is file of character;
         file o_file          : CHARACTER_FILE;        
         variable sigout_level    : std_logic;
@@ -64,11 +62,11 @@ begin
             -- initialize sigout only once during reset
             if resetted = false then
                 resetted := true;
-                -- initialize output signal depending on sigout
-                if sigout = '1' then
+                -- initialize output signal depending on sigout and on SIG_VAL_ON_RESET
+                if sigout = '1' or SIG_VAL_ON_RESET = '1' then
                     -- write ONE
                     sigout_level := '1';
-                    write(o_file, '1'); -- "00000001");
+                    write(o_file, '1');
                     if (PROTOCOL_SIGOUT = true) then
                         report SIGOUT_FILE_NAME&": simulated HW output signal "&integer'image(i)&" initialized to HIGH/ON.";
                     end if;
@@ -76,7 +74,7 @@ begin
                 else
                     -- write ZERO
                     sigout_level := '0';
-                    write(o_file, '0'); -- "00000000");
+                    write(o_file, '0');
                     if (PROTOCOL_SIGOUT = true) then
                         report SIGOUT_FILE_NAME&": simulated HW output signal "&integer'image(i)&" initialized to LOW/OFF.";
                     end if;
@@ -89,7 +87,7 @@ begin
             if sigout_level /= '1' and sigout = '1' then
                 -- write ONE
                 sigout_level := '1';
-                write(o_file, '1'); -- "00000001");
+                write(o_file, '1');
                 flush(o_file);
                 if (PROTOCOL_SIGOUT = true) then
                     report SIGOUT_FILE_NAME&": simulated HW output signal "&integer'image(i)&" rising edge!";
@@ -97,7 +95,7 @@ begin
             elsif sigout_level /= '0' and sigout = '0' then
                 -- write ZERO
                 sigout_level := '0';
-                write(o_file, '0'); -- "00000000");
+                write(o_file, '0');
                 flush(o_file);
                 if (PROTOCOL_SIGOUT = true) then
                     report SIGOUT_FILE_NAME&": simulated HW output signal "&integer'image(i)&" falling edge!";

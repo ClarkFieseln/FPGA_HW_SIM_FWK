@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 
 # Version format: MAJOR.MINOR.BUGFIX
-VERSION = "1.0.9"
+VERSION = "1.0.10"
 VERSION_TOOL_TIP = "PoC (Proof of Concept):\n\
                     Basic set of features for demonstration purposes in Windows using FIFOs (named pipes) and shared files."
 
@@ -85,8 +85,18 @@ MAX_DI_COUNT = 32
 DI_PER_IN_CLK_PER = 4
 SW_PER_IN_CLK_PER = 4
 BUTTON_PER_IN_CLK_PER = 8
+PC_UTIL_PER_IN_CLK_PER = 1
+ADC_SAMPLING_PERIOD_IN_CLK_PER = 100
 BUTTON_TOGGLE_AUTO = False
 SWITCH_TOGGLE_AUTO = False
+
+# values to adapt sensor data (e.g. temperature) to full range of integer value passed via SPI (ADC -> FPGA)
+# TODO: implement in config.ini and in GUI if required
+NR_BITS_INT = 14
+MAX_INT = float(2.0**NR_BITS_INT)
+MIN_INT = float(0.0)
+MAX_VAL = 150.0
+MIN_VAL = -50.0
 
 # simulator options
 RUN_FOR_CLOCK_PERIODS = 50

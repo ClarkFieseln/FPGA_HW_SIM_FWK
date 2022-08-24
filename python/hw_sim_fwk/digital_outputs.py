@@ -1,5 +1,4 @@
 import configuration
-import oclock
 import logging
 from threading import Lock
 import threading
@@ -16,9 +15,6 @@ root = tkinter.Tk()
 root.withdraw()
 
 FILE_NAME_DO = []
-# NOTE: we use oclock.Event.wait(timeout) i.o. time.sleep(timeout) otherwise the main thread is blocked.
-#       The following event is never set, its only used to wait on it up to timeout and not block the main thread.
-evt_wake_up = oclock.Event()
 
 
 
@@ -39,7 +35,7 @@ class digital_outputs:
             self.__FIFO_R_DO_HIGH.append(0)
         # fill with None or 0 for now...initialization in threads instead.
         for i in range(configuration.NR_DOS):
-            self.__fifo_r_do.append(0)  # open(FILE_NAME_DO[i], 'r'))
+            self.__fifo_r_do.append(0)
             self.__lock_r_do.append(Lock())
         self.updateGuiDefs()
         self.__updateMemberVariables()
@@ -56,7 +52,7 @@ class digital_outputs:
             tkinter.messagebox.showwarning(title="WARNING", message="maximum nr. of digital outputs limited to " + str(
                 configuration.MAX_NR_DO))
             root.update()
-        FILE_NAME_DO_PART = configuration.FIFO_PATH + "do_"  # temporary variable
+        FILE_NAME_DO_PART = configuration.FIFO_PATH + "do_"
         FILE_NAME_DO = []
         for i in range(configuration.NR_DOS):
             FILE_NAME_DO.append(FILE_NAME_DO_PART + str(i))
@@ -117,9 +113,6 @@ class digital_outputs:
         # inform GUI
         self.__event.evt_gui_do_update.set()
 
-    # TODO: need to update threads as well?
-    #       need to call this method in on_cbNrDos_currentIndexChanged() in main Window?
-    #       or just remove this function and rely on restart of app for config changes to take effect?
     def __updateMemberVariables(self):
         self.DO_HIGH = []
         for i in range(configuration.NR_DOS):

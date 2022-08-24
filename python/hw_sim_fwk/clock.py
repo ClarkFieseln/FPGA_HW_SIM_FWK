@@ -17,13 +17,13 @@ cf = currentframe()
 
 class clock:
 ############
-    CLOCK_PERIOD_SEC = None # [0]
+    CLOCK_PERIOD_SEC = None
     __event = None
 
-    def __init__(self, event, CLOCK_PERIOD_SEC_ARG):
+    def __init__(self, event, CLOCK_PERIOD_SEC):
         logging.info('init clock')
         self.__event = event
-        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
+        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC
         self.updateGuiDefs()
         thread_clock = threading.Thread(name="clock_thread", target=self.thread_clock, args=("clock_thread",))
         thread_clock.start()

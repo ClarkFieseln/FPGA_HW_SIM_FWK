@@ -8,7 +8,6 @@ if platform == "win32":
     import win32file
 import threading
 import tkinter
-from threading import Lock
 
 
 
@@ -41,8 +40,6 @@ class digital_inputs:
     # fifo used
     __FIFO_W_DI_HIGH = [] # value written to FIFO (named pipe), set by python code
     __fifo_w_di = []
-    # TODO: need __lock_w_di?
-    __lock_w_di = [] # lock to access __FIFO_W_DI_HIGH[]
     __evt_set_one = []
     __evt_set_zero = []
 
@@ -57,8 +54,7 @@ class digital_inputs:
             for i in range(configuration.NR_DIS):
                 self.__FIFO_W_DI_HIGH.append(0)
             for i in range(configuration.NR_DIS):
-                self.__fifo_w_di.append(0)  # open(FILE_NAME_DI[i], 'w'))
-                self.__lock_w_di.append(Lock())
+                self.__fifo_w_di.append(0)
         else:
             for i in range(configuration.NR_DIS):
                 self.__evt_set_one.append(oclock.Event())
@@ -105,13 +101,13 @@ class digital_inputs:
                 configuration.MAX_NR_DI))
             root.update()
         if USE_DI_FIFO:
-            FILE_NAME_DI_PART = configuration.FIFO_PATH + "di_"  # temporary variable
+            FILE_NAME_DI_PART = configuration.FIFO_PATH + "di_"
             FILE_NAME_DI = []
             for i in range(configuration.NR_DIS):
                 FILE_NAME_DI.append(FILE_NAME_DI_PART + str(i))
         else:
-            FILE_NAME_DI_HIGH_PART = configuration.FILE_PATH + "di_high_"  # temporary variable
-            FILE_NAME_DI_LOW_PART = configuration.FILE_PATH + "di_low_"  # temporary variable
+            FILE_NAME_DI_HIGH_PART = configuration.FILE_PATH + "di_high_"
+            FILE_NAME_DI_LOW_PART = configuration.FILE_PATH + "di_low_"
             FILE_NAME_DI_HIGH = []
             FILE_NAME_DI_LOW = []
             for i in range(configuration.NR_DIS):
@@ -372,9 +368,6 @@ class digital_inputs:
         # update GUI
         self.__event.evt_gui_di_update.set()
 
-    # TODO: need to update member variables and threads as well.
-    #       need to call this method e.g. in on_cbNrDis_currentIndexChanged() in main Window?
-    #       or just remove this function and rely on restart of app for config changes to take effect?
     def __updateMemberVariables(self):
         self.DI_HIGH = []
         for i in range(configuration.NR_DIS):
