@@ -19,3 +19,8 @@ FPGA Hardware Simulation Framework
 
 [Demo Video](https://www.youtube.com/watch?v=Yqu1DDGK04c "FPGA_HW_SIM_FWK Demo Video")
 
+## Summary
+This tool provides the following features, usually not supported by standard simulation methods:
+- GUI
+- concurrent input / output
+- interactive experience with emulated HW
