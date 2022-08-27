@@ -33,8 +33,11 @@ NR_DATA_OUT_VAL = (NR_DATA_OUT - 2)
 # TODO: check if NBLANKBITS = 2 is ok, or if we need to change the logic
 #       so NBLANKBITS = 1 matches what the receiver side expects/configured.
 #       At the moment the first blank bit is NOT seen by the VHDL simulation, so we send 2.
+#       As a workaround we use the "positive" flanks of self.__SPI_SCK instead of the neg.
+#       At the moment following combinations work: NBLANKBITS = 1, __SPI_SCK positive
+#                                                  NBLANKBITS = 2, __SPI_SCK negative
 ###########################################################################################
-NBLANKBITS = 2 # 1
+NBLANKBITS = 1 # 2 # 1
 
 
 
@@ -240,7 +243,9 @@ class LT2314:
             ################################
             if self.__SPI_SCK != temp_line_int:
                 self.__SPI_SCK = temp_line_int
-                if self.__SPI_SCK == 0:
+                # WORKAROUND for now..
+                # if self.__SPI_SCK == 0:
+                if self.__SPI_SCK == 1:
                     self.__evt_SCK_is_zero.set()
         logging.info("Thread %s: finished!", name)
 
