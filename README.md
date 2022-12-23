@@ -24,5 +24,5 @@ This tool provides the following features, usually not supported by standard sim
 - GUI
 - concurrent input / output
 - interactive experience with emulated HW
-  (although no "real-time" is yet supported, the stimulus and results are fast enough
-   to produce a realistic HW behavior. Soon this tool will be improved to work even much faster!)
+  (although no "real-time" is yet supported, with simulation rates of 250Hz the stimulus and results are fast enough
+   to produce a realistic HW behavior. Soon this tool will be improved to work even much faster, up to 25kHz!)
