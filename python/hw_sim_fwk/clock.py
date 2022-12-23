@@ -1,3 +1,5 @@
+import time
+
 import configuration
 import logging
 import threading
@@ -75,7 +77,9 @@ class clock:
             # raise event for new clock transition
             self.__event.evt_clock.set()
             # wait half clock period
-            self.__event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0]/2)
+            # BUG - event.wait() has a delay of 10ms which limits the clock frequency to mas 100 Hz
+            # self.__event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0]/2)
+            time.sleep(self.CLOCK_PERIOD_SEC[0]/2)
         logging.info("Thread %s: finished!", name)
 
 

@@ -1,3 +1,5 @@
+import time
+
 import oclock
 import logging
 import configuration
@@ -67,7 +69,10 @@ class adc_app:
         # thread loop
         while self.__event.evt_close_app.is_set() == False:
             # blocking call
-            self.__evt_set_one.wait()
+            # BUG 10ms delay
+            # self.__evt_set_one.wait()
+            while self.__evt_set_one.is_set() is False:
+                time.sleep(self.CLOCK_PERIOD_SEC[0]/4)
             self.__evt_set_one.clear()
             if os.path.isfile(FILE_NAME_SAMPLING_PULSE_LOW):
                 renamed = False
@@ -92,7 +97,9 @@ class adc_app:
             logging.debug("sampling_pulse set to ONE")
             # clear automatically...after a short time (but at least CLOCK_PERIOD_SEC)
             ##########################################################################
-            self.__event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0])
+            # BUG: 10ms delay
+            # self.__event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0])
+            time.sleep(self.CLOCK_PERIOD_SEC[0])
             self.__evt_set_zero.set()
             ##########################################################################
         logging.info("Thread %s: finished!", name)
@@ -103,7 +110,10 @@ class adc_app:
         # thread loop
         while self.__event.evt_close_app.is_set() == False:
             # blocking call
-            self.__evt_set_zero.wait()
+            # BUG 10ms delay
+            # self.__evt_set_zero.wait()
+            while self.__evt_set_zero.is_set() is False:
+                time.sleep(self.CLOCK_PERIOD_SEC[0]/4)
             self.__evt_set_zero.clear()
             if os.path.isfile(FILE_NAME_SAMPLING_PULSE_HIGH):
                 renamed = False

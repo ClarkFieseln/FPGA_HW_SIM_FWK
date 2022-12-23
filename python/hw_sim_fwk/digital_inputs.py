@@ -8,7 +8,7 @@ if platform == "win32":
     import win32file
 import threading
 import tkinter
-
+import time
 
 
 # NOTE: we need root so we can close the messagebox
@@ -208,9 +208,13 @@ class digital_inputs:
             #       sync DIs are updated.
             #       The complete DI values (sync + async) will not be regular/periodic in the wave output.
             # wait DI period
-            self.__event.evt_wake_up.wait(DI_PERIOD_SEC)
+            # BUG 10ms delay
+            # self.__event.evt_wake_up.wait(DI_PERIOD_SEC)
+            time.sleep(DI_PERIOD_SEC)
             # wait random time within defined limits
-            # self.__evt_wake_up.wait(random.uniform(self.CLOCK_PERIOD_SEC[0], DI_PERIOD_SEC))
+            # BUG 10ms delay
+            # # self.__evt_wake_up.wait(random.uniform(self.CLOCK_PERIOD_SEC[0], DI_PERIOD_SEC))
+            # time.sleep(random.uniform(self.CLOCK_PERIOD_SEC[0], DI_PERIOD_SEC))
             ######################################
         logging.info("Thread %s: finished!", name)
 
@@ -224,7 +228,10 @@ class digital_inputs:
         # thread loop
         while self.__event.evt_close_app.is_set() == False:
             # blocking call
-            self.__evt_set_one[i].wait()
+            # BUG 10ms delay
+            # self.__evt_set_one[i].wait()
+            while self.__evt_set_one[i].is_set() is False:
+                time.sleep(self.CLOCK_PERIOD_SEC[0] / 4)
             self.__evt_set_one[i].clear()
             if os.path.isfile(FILE_NAME_DI_LOW[i]):
                 renamed = False
@@ -262,7 +269,10 @@ class digital_inputs:
         # thread loop
         while self.__event.evt_close_app.is_set() == False:
             # blocking call
-            self.__evt_set_zero[i].wait()
+            # BUG 10ms delay
+            # self.__evt_set_zero[i].wait()
+            while self.__evt_set_zero[i].is_set() is False:
+                time.sleep(self.CLOCK_PERIOD_SEC[0] / 4)
             self.__evt_set_zero[i].clear()
             if os.path.isfile(FILE_NAME_DI_HIGH[i]):
                 renamed = False
@@ -326,7 +336,10 @@ class digital_inputs:
         # wait until all DIs have been set in the threads..
         # this assures that "synchronous" DIs are set within the current clock cycle
         if self.__wait_di_set > 0:
-            self.__evt_all_dis_set.wait()
+            # BUG 10ms delay
+            # self.__evt_all_dis_set.wait()
+            while self.__evt_all_dis_set.is_set() is False:
+                time.sleep(self.CLOCK_PERIOD_SEC[0] / 4)
         # update GUI
         self.__event.evt_gui_di_update.set()
 
@@ -364,7 +377,10 @@ class digital_inputs:
         # wait until all DIs have been set in the threads..
         # this assures that "synchronous" DIs are set within the current clock cycle
         if self.__wait_di_set > 0:
-            self.__evt_all_dis_set.wait()
+            # BUG 10ms delay
+            # self.__evt_all_dis_set.wait()
+            while self.__evt_all_dis_set.is_set() is False:
+                time.sleep(self.CLOCK_PERIOD_SEC[0] / 4)
         # update GUI
         self.__event.evt_gui_di_update.set()
 

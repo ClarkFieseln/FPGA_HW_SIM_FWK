@@ -178,7 +178,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         def run(self):
             logging.info("MyGuiUpdateThread:run()")
             while event.evt_close_app.is_set() == False:
-                event.evt_wake_up.wait(1 / configuration.GUI_UPDATE_PERIOD_IN_HZ)
+                # BUG: 10ms delay
+                # event.evt_wake_up.wait(1 / configuration.GUI_UPDATE_PERIOD_IN_HZ)
+                time.sleep(1 / configuration.GUI_UPDATE_PERIOD_IN_HZ)
                 self.updated.emit("Hi")
             logging.info("left MyGuiUpdateThread:run()!")
 
@@ -191,9 +193,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # device on?
             if event.evt_set_power_on.is_set() == True:
                 if configuration.SHOW_LIVE_STATUS:
+                    # update "real" clock frequency (towards simulation tool)
+                    if self.statusCnt == 0:
+                        self.lbl_freq.setText(str(int(self.scheduler.test.freq)) + " Hz")
                     # set alternating symbol
-                    self.lblStatus.setText(" " + self.status[self.statusCnt])
-                    self.statusCnt = (self.statusCnt + 1) % 4
+                    self.lblStatus.setText(" " + self.status[(self.statusCnt)%4])
+                    self.statusCnt = (self.statusCnt + 1) % configuration.GUI_UPDATE_PERIOD_IN_HZ
                     # blink active LED
                     self.pbActive.setChecked(not self.pbActive.isChecked())
                     if self.pbActive.isChecked():
@@ -225,12 +230,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # '''
                 if event.evt_gui_temperature_update.is_set():
                     event.evt_gui_temperature_update.clear()
-                    self.lblTemp.setText(str(self.LT2314.get_temperature()))
+                    # WORKAROUND to display too many zeros
+                    # self.lblTemp.setText(str(self.LT2314.get_temperature()))
+                    temp = self.LT2314.get_temperature()
+                    if temp != 0:
+                        self.lblTemp.setText(str(temp))
                 # '''
                 # LCD display
                 if event.evt_gui_int_out_update.is_set():
                     event.evt_gui_int_out_update.clear()
-                    self.lcdTempOut.display(self.adc_app.get_data_out())
+                    # WORKAROUND to display too many zeros
+                    # self.lcdTempOut.display(self.adc_app.get_data_out())
+                    temp = self.adc_app.get_data_out()
+                    if temp != 0.0:
+                        self.lcdTempOut.display(temp)
                     # update also the temperature sensor
                     # with the value used for the last transmission from ADC to FPGA over SPI
                     # NOTE: comment this line if lblTemp is updated when evt_gui_temperature_update is set
@@ -295,7 +308,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.digital_outputs = digital_outputs(event)
         self.buttons = buttons(event, self.CLOCK_PERIOD_SEC)
         self.pc_sensor = pc_sensor(event, self.CLOCK_PERIOD_SEC)
-        self.LT2314 = LT2314(event, self.pc_sensor)
+        self.LT2314 = LT2314(self.CLOCK_PERIOD_SEC, event, self.pc_sensor)
         self.adc_app = adc_app(event, self.CLOCK_PERIOD_SEC)
         # fill "after" objects have been created
         self.ref_scheduler.clock = self.clock
@@ -413,7 +426,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         label = QtWidgets.QLabel(self.tab_fpga)
         label.setGeometry(QtCore.QRect(990, 450, 58, 56))
         label.setStyleSheet("color: rgb(238, 238, 236);")
-        label.setObjectName("refreh_gui")
+        label.setObjectName("refresh_gui")
         label.setText("GUI")
         label.setFont(QFont(FONT, configuration.TEXT_SIZE - 3))
         # combo boxes for logging level
@@ -429,6 +442,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         currentTime = strftime("%Y.%m.%d %H:%M:%S - ", gmtime()) + platform
         self.setWindowTitle("HW SIM FWK")
         self.lblVersion.setText(configuration.VERSION + "\n" + currentTime)
+        # frequency label
+        self.lbl_freq = QtWidgets.QLabel(self.tab_fpga)
+        self.lbl_freq.setGeometry(QtCore.QRect(565, 310, 68, 56))
+        self.lbl_freq.setStyleSheet("color: rgb(109, 109, 109);font-weight: bold;")
+        self.lbl_freq.setFont(QFont(FONT, configuration.TEXT_SIZE))
+        self.lbl_freq.setObjectName("lbl_freq")
+        self.lbl_freq.setText("22345 Hz")
         # digital inputs and outputs
         label = QtWidgets.QLabel(self.tab_fpga)
         label.setGeometry(QtCore.QRect(453, 450, 58, 56))
@@ -756,7 +776,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # wait for specified time (dummy event evt_wake_up never comes)
         self.remaining_time_to_run = configuration.RUN_FOR_CLOCK_PERIODS
         while ((self.remaining_time_to_run > 0) and (event.evt_pause.is_set() == False) and (event.evt_step_on.is_set() == False)):
-            event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0])
+            # BUG 10ms delay
+            # event.evt_wake_up.wait(self.CLOCK_PERIOD_SEC[0])
+            time.sleep(self.CLOCK_PERIOD_SEC[0])
             self.remaining_time_to_run = self.remaining_time_to_run - 1
             # update GUI
             event.evt_gui_remain_run_time_update.set()

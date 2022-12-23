@@ -1,3 +1,5 @@
+import time
+
 import psutil
 import logging
 from threading import Lock
@@ -65,7 +67,9 @@ class pc_sensor():
             self.__cpu_percent = psutil.cpu_percent()
             self.__lock_cpu.release()
             # this runs close to scheduler clock but still asynchronous to it..
-            self.__event.evt_wake_up.wait(PC_UTIL_PERIOD_SEC)
+            # BUG: 10ms delay
+            # self.__event.evt_wake_up.wait(PC_UTIL_PERIOD_SEC)
+            time.sleep(PC_UTIL_PERIOD_SEC)
         logging.info("Thread %s: finished!", name)
 
     def do_pc_info(self):

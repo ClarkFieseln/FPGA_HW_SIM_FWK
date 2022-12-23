@@ -8,7 +8,7 @@ from sys import platform
 if platform == "win32":
     import win32file
 import tkinter
-
+import time
 
 
 ###################################################
@@ -43,6 +43,7 @@ NBLANKBITS = 1 # 2 # 1
 
 class LT2314:
 #############
+    CLOCK_PERIOD_SEC = None
     __event = None
     __pc_sensor = None
     __SPI_nCS = 1 # value read from FIFO (named pipe), set by VHDL code
@@ -55,8 +56,9 @@ class LT2314:
     __rawdata = ['0']*NR_DATA_OUT_VAL
     __temperature = 0
 
-    def __init__(self, event, pc_sensor):
+    def __init__(self, CLOCK_PERIOD_SEC_ARG, event, pc_sensor):
         logging.info('init LT2314')
+        self.CLOCK_PERIOD_SEC = CLOCK_PERIOD_SEC_ARG
         self.__event = event
         self.__pc_sensor = pc_sensor
         self.updateGuiDefs()
@@ -126,7 +128,10 @@ class LT2314:
         # thread loop
         while self.__event.evt_close_app.is_set() == False:
             # blocking call (wait for negative flank on nCS)
-            self.__evt_nCS_is_zero.wait()
+            # BUG 10ms delay
+            # self.__evt_nCS_is_zero.wait()
+            while self.__evt_nCS_is_zero.is_set() is False:
+                time.sleep(self.CLOCK_PERIOD_SEC[0] / 4)
             self.__evt_nCS_is_zero.clear()
             # get raw data
             # NOTE: data is "always" acquired asynchronous to scheduler, no matter if call get_cpu_percent_int()
@@ -157,7 +162,10 @@ class LT2314:
             logging_info = ""
             # now nCS is 0, that is, state = CONV
             while self.__SPI_nCS == 0:
-                self.__evt_SCK_is_zero.wait()
+                # BUG 10ms delay
+                # self.__evt_SCK_is_zero.wait()
+                while self.__evt_SCK_is_zero.is_set() is False:
+                    time.sleep(self.CLOCK_PERIOD_SEC[0] / 4)
                 self.__evt_SCK_is_zero.clear()
                 if (counter > (NR_DATA_OUT_VAL - 1) or counter < 0):
                     if self.__SPI_DIN != '0':
