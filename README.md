@@ -1,6 +1,10 @@
 # FPGA_HW_SIM_FWK
 FPGA Hardware Simulation Framework
 
+Simulate hardware containing an FPGA interactively!
+The concurrent simulation of stimulus and results is straight forward, "real" threads can be used to test realistic situations which are otherwise not possible with standard VHDL or Verilog simulation tools.
+The simulation framework replaces the FPGA chip itself, as well as peripheral components and external devices.
+
 [Article in Code Project](https://www.codeproject.com/Articles/5329919/FPGA-Hardware-Simulation-Framework-FPGA-HW-SIM-FWK "FPGA_HW_SIM_FWK Article in Code Project")
 
 [New GitHub Project with improved performance](https://github.com/ClarkFieseln/FPGA_HW_SIM_FWK_2)
